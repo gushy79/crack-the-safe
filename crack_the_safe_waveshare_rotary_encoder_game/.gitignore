@@ -55,3 +55,6 @@ firmware_backup/
 *.swp
 .DS_Store
 *.log
+
+# Host-side test binary
+test/test_game
