@@ -122,3 +122,7 @@ tmp/
 # Large CAD source — distributed out-of-band
 TorsionTableCAD/lr4_table_clean.FCStd
 TorsionTableCAD/TorsionTable.zip
+
+# --- Local project notes (not part of the sample) ---------------------------
+docs/status/
+docs/backlog.md
