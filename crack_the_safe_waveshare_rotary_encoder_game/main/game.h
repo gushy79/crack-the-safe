@@ -151,3 +151,13 @@ uint32_t game_time_left_ms(const game_t *g, uint32_t now_ms);
 
 /** The level the next game will be (after a win, the one after). */
 int game_next_level(const game_t *g);
+
+/**
+ * Score for opening a safe: the level times the tenths of a second left on
+ * the clock. A pure function of two numbers, so anything that knows the level
+ * and the time left (a leaderboard server, say) can recompute it.
+ */
+uint32_t game_score(int level, uint32_t time_left_ms);
+
+/** The score of the safe just opened (frozen at the opening); 0 otherwise. */
+uint32_t game_current_score(const game_t *g, uint32_t now_ms);

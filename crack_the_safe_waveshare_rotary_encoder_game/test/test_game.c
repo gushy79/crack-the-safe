@@ -502,6 +502,67 @@ static void test_reset_returns_to_title(void)
     CHECK(g.level == 1);
 }
 
+/* ---- score ------------------------------------------------------------ */
+
+static void test_score_is_level_times_tenths_left(void)
+{
+    CHECK(game_score(1, 192000u) == 1920u);          /* 3:12 left on level 1 */
+    CHECK(game_score(3, 45000u) == 3u * 450u);
+    CHECK(game_score(8, 20000u) == 8u * 200u);
+    CHECK(game_score(2, 99u) == 0u);                 /* under a tenth: nothing */
+    CHECK(game_score(2, 100u) == 2u);
+    CHECK(game_score(1, 0) == 0u);
+}
+
+static void test_score_clamps_the_level(void)
+{
+    CHECK(game_score(0, 10000u) == game_score(1, 10000u));
+    CHECK(game_score(-3, 10000u) == game_score(1, 10000u));
+    CHECK(game_score(GAME_LEVELS + 5, 10000u) == game_score(GAME_LEVELS, 10000u));
+}
+
+static void test_more_time_left_never_scores_less(void)
+{
+    for (int lv = 1; lv <= GAME_LEVELS; lv++) {
+        uint32_t prev = 0;
+        for (uint32_t ms = 0; ms <= game_level_ms(lv); ms += 250) {
+            const uint32_t s = game_score(lv, ms);
+            CHECK(s >= prev);
+            prev = s;
+        }
+    }
+}
+
+static void test_higher_level_beats_lower_at_the_same_time_left(void)
+{
+    CHECK(game_score(5, 15000u) > game_score(4, 15000u));
+}
+
+static void test_current_score_only_when_unlocked(void)
+{
+    game_t g;
+    begin(&g, 99);
+    CHECK(game_current_score(&g, s_now) == 0);       /* playing */
+    for (int k = 0; k < GAME_CODE_LEN; k++) {
+        solve_stage(&g);
+    }
+    CHECK(g.mode == GAME_UNLOCKED);
+    const uint32_t s = game_current_score(&g, s_now);
+    CHECK(s == game_score(g.level, game_time_left_ms(&g, s_now)));
+    CHECK(s > 0);
+    CHECK(game_current_score(&g, s_now + 100000) == s);   /* frozen at the opening */
+}
+
+static void test_no_score_for_a_loss(void)
+{
+    game_t g;
+    begin(&g, 42);
+    go_to_target(&g);
+    turn(&g, game_stage_dir(&g));
+    CHECK(g.mode == GAME_WRONG);
+    CHECK(game_current_score(&g, s_now) == 0);
+}
+
 /* ---- pause ------------------------------------------------------------ */
 
 static void test_pause_stops_the_clock(void)
@@ -565,6 +626,12 @@ int main(void)
     RUN(test_tap_after_lockout_starts_next_level);
     RUN(test_game_new_goes_to_level_one);
     RUN(test_reset_returns_to_title);
+    RUN(test_score_is_level_times_tenths_left);
+    RUN(test_score_clamps_the_level);
+    RUN(test_more_time_left_never_scores_less);
+    RUN(test_higher_level_beats_lower_at_the_same_time_left);
+    RUN(test_current_score_only_when_unlocked);
+    RUN(test_no_score_for_a_loss);
     RUN(test_pause_stops_the_clock);
     RUN(test_pause_holds_the_red_timer);
 

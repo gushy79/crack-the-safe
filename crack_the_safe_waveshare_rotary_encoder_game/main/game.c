@@ -358,6 +358,25 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
     return GAME_EV_NONE;
 }
 
+uint32_t game_score(int level, uint32_t time_left_ms)
+{
+    if (level < 1) {
+        level = 1;
+    }
+    if (level > GAME_LEVELS) {
+        level = GAME_LEVELS;
+    }
+    return (uint32_t)level * (time_left_ms / 100u);
+}
+
+uint32_t game_current_score(const game_t *g, uint32_t now_ms)
+{
+    if (g->mode != GAME_UNLOCKED) {
+        return 0;
+    }
+    return game_score(g->level, game_time_left_ms(g, now_ms));
+}
+
 uint32_t game_elapsed_s(const game_t *g, uint32_t now_ms)
 {
     if (g->started_ms == 0 && (g->mode == GAME_TITLE || g->mode == GAME_INSTRUCTIONS)) {
