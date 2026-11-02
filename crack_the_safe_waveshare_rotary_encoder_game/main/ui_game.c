@@ -245,6 +245,18 @@ static void refresh_unlocked(void)
     snprintf(buf, sizeof(buf), "Level %u \xC2\xB7 %lu:%02lu left", g_game.level,
              (unsigned long)(s / 60), (unsigned long)(s % 60));
     ui_lv_set_text(objects.reward_meta, buf);
+    /* The score, and whether it made the Top 5 (rank 0 = a new best). */
+    char num[16];
+    scores_fmt_thousands(app_last_score(), num, sizeof(num));
+    const int rank = app_last_rank();
+    if (rank == 0) {
+        snprintf(buf, sizeof(buf), "New best! %s", num);
+    } else if (rank > 0) {
+        snprintf(buf, sizeof(buf), "Score %s \xC2\xB7 #%d", num, rank + 1);
+    } else {
+        snprintf(buf, sizeof(buf), "Score %s", num);
+    }
+    ui_lv_set_text(objects.reward_score, buf);
     const int next = game_next_level(&g_game);
     if (next == 1) {
         ui_lv_set_text(objects.reward_again, "Turn to Play Again");
@@ -371,10 +383,36 @@ static void refresh_settings(void)
     ui_lv_set_state_in(objects.settings_vol_up_icon, WRONG, at_max);
 }
 
+/* ---- Top Scores ------------------------------------------------------------ */
+
+/* Five rows: "1.  1,920 · L1 · 3:12" (score, level, time that was left), or
+ * "--" for an empty place. */
+static void refresh_scores(void)
+{
+    lv_obj_t *const rows[SCORES_MAX] = {
+        objects.scores_row_1, objects.scores_row_2, objects.scores_row_3,
+        objects.scores_row_4, objects.scores_row_5,
+    };
+    const score_table_t *t = app_scores();
+    for (int i = 0; i < SCORES_MAX; i++) {
+        char buf[40];
+        if (i < t->count) {
+            char num[16];
+            scores_fmt_thousands(t->e[i].score, num, sizeof(num));
+            snprintf(buf, sizeof(buf), "%d.  %s \xC2\xB7 L%u \xC2\xB7 %u:%02u", i + 1, num,
+                     t->e[i].level, t->e[i].left_s / 60, t->e[i].left_s % 60);
+        } else {
+            snprintf(buf, sizeof(buf), "%d.  --", i + 1);
+        }
+        ui_lv_set_text(rows[i], buf);
+    }
+}
+
 void ui_game_refresh(void)
 {
     refresh_play();
     refresh_unlocked();
     refresh_headphones();
     refresh_settings();
+    refresh_scores();
 }

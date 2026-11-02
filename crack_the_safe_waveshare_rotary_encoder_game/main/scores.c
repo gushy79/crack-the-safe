@@ -4,6 +4,7 @@
 
 #include "scores.h"
 
+#include <stdio.h>
 #include <string.h>
 
 void scores_clear(score_table_t *t)
@@ -57,4 +58,24 @@ bool scores_valid(const score_table_t *t)
         }
     }
     return true;
+}
+
+void scores_fmt_thousands(uint32_t v, char *out, unsigned out_len)
+{
+    if (out_len == 0) {
+        return;
+    }
+    char digits[16];
+    const int n = snprintf(digits, sizeof(digits), "%lu", (unsigned long)v);
+    unsigned o = 0;
+    for (int i = 0; i < n && o + 1 < out_len; i++) {
+        if (i > 0 && (n - i) % 3 == 0) {
+            if (o + 2 >= out_len) {
+                break;
+            }
+            out[o++] = ',';
+        }
+        out[o++] = digits[i];
+    }
+    out[o] = '\0';
 }

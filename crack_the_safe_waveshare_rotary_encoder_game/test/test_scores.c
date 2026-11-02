@@ -164,6 +164,31 @@ static void test_valid_rejects_corrupt_tables(void)
     CHECK(!scores_valid(&bad));
 }
 
+static void test_thousands_separators(void)
+{
+    char b[16];
+    scores_fmt_thousands(0, b, sizeof b);           CHECK(strcmp(b, "0") == 0);
+    scores_fmt_thousands(7, b, sizeof b);           CHECK(strcmp(b, "7") == 0);
+    scores_fmt_thousands(999, b, sizeof b);         CHECK(strcmp(b, "999") == 0);
+    scores_fmt_thousands(1000, b, sizeof b);        CHECK(strcmp(b, "1,000") == 0);
+    scores_fmt_thousands(1920, b, sizeof b);        CHECK(strcmp(b, "1,920") == 0);
+    scores_fmt_thousands(24000, b, sizeof b);       CHECK(strcmp(b, "24,000") == 0);
+    scores_fmt_thousands(1234567, b, sizeof b);     CHECK(strcmp(b, "1,234,567") == 0);
+    scores_fmt_thousands(4294967295u, b, sizeof b); CHECK(strcmp(b, "4,294,967,295") == 0);
+}
+
+static void test_thousands_truncates_safely(void)
+{
+    char b[8];
+    memset(b, 'x', sizeof b);
+    scores_fmt_thousands(1234567, b, 4);            /* "1,2" fits, always terminated */
+    CHECK(strlen(b) < 4);
+    CHECK(b[0] == '1');
+    scores_fmt_thousands(5, b, 1);
+    CHECK(b[0] == '\0');
+    scores_fmt_thousands(5, b, 0);                  /* must not write at all */
+}
+
 int main(void)
 {
     RUN(test_empty_table);
@@ -176,6 +201,8 @@ int main(void)
     RUN(test_new_best_into_a_full_table);
     RUN(test_table_never_breaks_under_many_inserts);
     RUN(test_valid_rejects_corrupt_tables);
+    RUN(test_thousands_separators);
+    RUN(test_thousands_truncates_safely);
 
     printf("\n%d checks, %d failed\n", s_checks, s_failed);
     return s_failed ? 1 : 0;

@@ -6,9 +6,9 @@
  *        ignores it during the replay lockout).
  * Start: the Start button on the instructions. Deals the first code.
  * Menu:  every game screen's LONG_PRESSED handler -- touch and hold for the
- *        menu: New Game, Settings, Back.
- * Menu*, Settings*: the menu's and the Settings screen's buttons (the
- *        volume's - and + among them).
+ *        menu: New Game, Scores, Settings, Back.
+ * Menu*, Settings*, Scores*: the menu's, the Settings screen's (the volume's
+ *        - and + among them) and the Top Scores screen's buttons.
  * Headphones*: the Bluetooth pairing screen. HeadphonesSelect carries the
  *        list row in userData.
  */
@@ -49,7 +49,19 @@ void action_menu_settings(lv_event_t *e)
     app_menu_settings();
 }
 
+void action_menu_scores(lv_event_t *e)
+{
+    (void)e;
+    app_menu_scores();
+}
+
 void action_menu_back(lv_event_t *e)
+{
+    (void)e;
+    app_back();
+}
+
+void action_scores_back(lv_event_t *e)
 {
     (void)e;
     app_back();

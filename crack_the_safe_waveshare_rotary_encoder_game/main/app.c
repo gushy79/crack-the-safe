@@ -13,6 +13,8 @@
 
 #include "bt_link.h"
 #include "knob_board.h"
+#include "score_store.h"
+#include "scores.h"
 #include "screens.h"
 #include "sound.h"
 #include "ui.h"
@@ -58,6 +60,50 @@ static int feel_range(void)
 static bool s_hum_played;
 static bool s_prize_played;
 
+/* High scores: one Top-5 table per scored mode (Classic only for now), kept in
+ * NVS. The last opened safe's score and rank are what the vault screen shows. */
+static score_table_t s_scores[SCORE_MODES];
+static uint32_t s_last_score;
+static int s_last_rank = -1;       /* 0 = new best, -1 = not in the table */
+
+static int score_mode(void)
+{
+    return 0;                      /* Classic; Lives gets its own table later */
+}
+
+/* The safe just opened: score it and, if it makes the table, save it. */
+static void record_score(void)
+{
+    const uint32_t now = app_now_ms();
+    s_last_score = game_current_score(&g_game, now);
+    const score_entry_t e = {
+        .score  = s_last_score,
+        .level  = g_game.level,
+        .left_s = (uint16_t)(game_time_left_ms(&g_game, now) / 1000u),
+    };
+    const int m = score_mode();
+    s_last_rank = scores_insert(&s_scores[m], e);
+    if (s_last_rank >= 0) {
+        score_store_save(m, &s_scores[m]);
+    }
+    ESP_LOGI(TAG, "score %lu, rank %d", (unsigned long)s_last_score, s_last_rank);
+}
+
+const score_table_t *app_scores(void)
+{
+    return &s_scores[score_mode()];
+}
+
+uint32_t app_last_score(void)
+{
+    return s_last_score;
+}
+
+int app_last_rank(void)
+{
+    return s_last_rank;
+}
+
 uint32_t app_now_ms(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000);
@@ -83,7 +129,7 @@ int app_door_frame_at(uint32_t t)
  * of whatever the game is showing. While anything is on it the game is paused:
  * no turns, taps or ticks reach it and its clock is stopped. */
 
-typedef enum { OVER_MENU, OVER_SETTINGS, OVER_HEADPHONES } over_t;
+typedef enum { OVER_MENU, OVER_SETTINGS, OVER_HEADPHONES, OVER_SCORES } over_t;
 
 #define OVER_MAX 3
 static over_t s_over[OVER_MAX];
@@ -102,6 +148,7 @@ static void show_screen_for_mode(void)
         switch (s_over[s_depth - 1]) {
         case OVER_MENU:     want = SCREEN_ID_PAGE_MENU;       break;
         case OVER_SETTINGS: want = SCREEN_ID_PAGE_SETTINGS;   break;
+        case OVER_SCORES:   want = SCREEN_ID_PAGE_SCORES;     break;
         default:            want = SCREEN_ID_PAGE_HEADPHONES; break;
         }
     } else {
@@ -188,6 +235,7 @@ static void handle(unsigned ev)
         sound_vault_door();
         s_hum_played = false;
         s_prize_played = false;
+        record_score();
         ESP_LOGI(TAG, "unlocked in %u attempt(s), %lus", g_game.attempts,
                  (unsigned long)game_elapsed_s(&g_game, app_now_ms()));
     }
@@ -279,6 +327,12 @@ void app_menu_settings(void)
     ui_game_refresh();
 }
 
+void app_menu_scores(void)
+{
+    over_push(OVER_SCORES);
+    ui_game_refresh();
+}
+
 void app_back(void)
 {
     over_pop();
@@ -359,6 +413,9 @@ void app_init(uint32_t seed)
 {
     bt_link_init();
     sound_init();
+    for (int m = 0; m < SCORE_MODES; m++) {
+        score_store_load(m, &s_scores[m]);
+    }
     game_init(&g_game, seed);
     ui_game_refresh();
     lv_timer_create(app_timer_cb, 20, NULL);

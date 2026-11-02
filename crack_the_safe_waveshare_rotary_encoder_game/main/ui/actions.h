@@ -24,6 +24,8 @@ extern void action_headphones_done(lv_event_t * e);
 extern void action_headphones_info(lv_event_t * e);
 extern void action_headphones_info_close(lv_event_t * e);
 extern void action_headphones_forget(lv_event_t * e);
+extern void action_menu_scores(lv_event_t * e);
+extern void action_scores_back(lv_event_t * e);
 
 #ifdef __cplusplus
 }

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "game.h"
+#include "scores.h"
 
 /** The one game. ui_game.c reads it to fill the screens. */
 extern game_t g_game;
@@ -33,10 +34,19 @@ void app_start(void);
 void app_menu(void);
 void app_menu_new_game(void);
 void app_menu_settings(void);
+/** The Top-5 Scores page. */
+void app_menu_scores(void);
 /** Back out of the menu, Settings or Headphones, one screen at a time. */
 void app_back(void);
 /** Settings' Volume -/+ (and the knob, while Settings is up). */
 void app_volume_step(int steps);
+
+/* High scores (the table for the current mode) and the last opened safe's
+ * score. The rank is 0 for a new best, 1..4 for a place in the table, -1 if it
+ * did not make it. */
+const score_table_t *app_scores(void);
+uint32_t app_last_score(void);
+int app_last_rank(void);
 
 /* The Headphones (Bluetooth pairing) screen and its buttons. */
 void app_headphones_open(void);

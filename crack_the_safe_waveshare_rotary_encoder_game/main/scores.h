@@ -40,3 +40,7 @@ int scores_insert(score_table_t *t, score_entry_t entry);
 /** Is a table read back from storage consistent (count in range, best
  *  first, no empty scores)? A bad one should be replaced by an empty one. */
 bool scores_valid(const score_table_t *t);
+
+/** Write a number with thousands separators ("1,920") into out, always
+ *  NUL-terminated and truncated to fit. */
+void scores_fmt_thousands(uint32_t v, char *out, unsigned out_len);

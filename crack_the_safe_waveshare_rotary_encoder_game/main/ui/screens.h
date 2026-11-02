@@ -18,7 +18,8 @@ enum ScreensEnum {
     SCREEN_ID_PAGE_HEADPHONES = 5,
     SCREEN_ID_PAGE_PLAY = 6,
     SCREEN_ID_PAGE_UNLOCKED = 7,
-    _SCREEN_ID_LAST = 7
+    SCREEN_ID_PAGE_SCORES = 8,
+    _SCREEN_ID_LAST = 8
 };
 
 typedef struct _objects_t {
@@ -29,6 +30,7 @@ typedef struct _objects_t {
     lv_obj_t *page_headphones;
     lv_obj_t *page_play;
     lv_obj_t *page_unlocked;
+    lv_obj_t *page_scores;
     lv_obj_t *title_ring;
     lv_obj_t *title_bolts;
     lv_obj_t *title_bolt_slots;
@@ -50,6 +52,8 @@ typedef struct _objects_t {
     lv_obj_t *menu_title;
     lv_obj_t *menu_new;
     lv_obj_t *menu_new_text;
+    lv_obj_t *menu_scores;
+    lv_obj_t *menu_scores_text;
     lv_obj_t *menu_settings;
     lv_obj_t *menu_settings_text;
     lv_obj_t *menu_back;
@@ -158,6 +162,15 @@ typedef struct _objects_t {
     lv_obj_t *reward_code;
     lv_obj_t *reward_meta;
     lv_obj_t *reward_again;
+    lv_obj_t *reward_score;
+    lv_obj_t *scores_title;
+    lv_obj_t *scores_row_1;
+    lv_obj_t *scores_row_2;
+    lv_obj_t *scores_row_3;
+    lv_obj_t *scores_row_4;
+    lv_obj_t *scores_row_5;
+    lv_obj_t *scores_back;
+    lv_obj_t *scores_back_text;
 } objects_t;
 
 extern objects_t objects;
@@ -182,6 +195,9 @@ void tick_screen_page_play();
 
 void create_screen_page_unlocked();
 void tick_screen_page_unlocked();
+
+void create_screen_page_scores();
+void tick_screen_page_scores();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);
