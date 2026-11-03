@@ -67,6 +67,9 @@ static bool s_prize_played;
 static score_table_t s_scores[SCORE_MODES];
 static uint32_t s_last_score;
 static int s_last_rank = -1;       /* 0 = new best, -1 = not in the table */
+/* Which table the Scores page shows: 0 Classic, 1 Lives. It starts on the
+ * current mode's and the knob flips it. */
+static int s_scores_view;
 static int s_save_mode = -1;       /* a table waiting to be saved, or -1 */
 
 /* The table for the current rules; Zen shows the Classic one (it records
@@ -112,7 +115,12 @@ static void flush_scores(void)
 
 const score_table_t *app_scores(void)
 {
-    return &s_scores[score_mode()];
+    return &s_scores[s_scores_view];
+}
+
+int app_scores_view(void)
+{
+    return s_scores_view;
 }
 
 uint32_t app_last_score(void)
@@ -307,6 +315,9 @@ void app_rotate(int detents)
             ui_game_scroll_headphones(detents);
         } else if (over_is(OVER_SETTINGS)) {
             app_volume_step(detents);        /* the knob turns the volume */
+        } else if (over_is(OVER_SCORES)) {
+            s_scores_view = (s_scores_view + 1) % SCORE_MODES;   /* the other table */
+            ui_game_refresh();
         }
         return;                              /* the game is paused */
     }
@@ -377,6 +388,7 @@ void app_menu_settings(void)
 
 void app_menu_scores(void)
 {
+    s_scores_view = score_mode();
     over_push(OVER_SCORES);
     ui_game_refresh();
 }

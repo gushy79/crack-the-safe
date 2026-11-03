@@ -431,7 +431,7 @@ static void refresh_scores(void)
     };
     const score_table_t *t = app_scores();
     ui_lv_set_text(objects.scores_title,
-                   g_game.rules == GAME_RULES_LIVES ? "Lives Scores" : "Top Scores");
+                   app_scores_view() == 1 ? "Lives Scores" : "Classic Scores");
     for (int i = 0; i < SCORES_MAX; i++) {
         char buf[40];
         if (i < t->count) {

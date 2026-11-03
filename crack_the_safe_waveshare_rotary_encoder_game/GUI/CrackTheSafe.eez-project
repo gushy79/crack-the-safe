@@ -7899,9 +7899,113 @@
               "groupIndex": 0,
               "children": [],
               "identifier": "scores_title",
-              "text": "Top Scores",
+              "text": "Classic Scores",
               "textType": "literal",
               "longMode": "DOT",
+              "recolor": false
+            },
+            {
+              "objID": "440a7e60-e1c6-45f6-a337-8963c43be9c5",
+              "type": "LVGLLabelWidget",
+              "left": 288,
+              "top": 61,
+              "width": 20,
+              "height": 0,
+              "leftUnit": "px",
+              "topUnit": "px",
+              "widthUnit": "px",
+              "heightUnit": "content",
+              "customInputs": [],
+              "customOutputs": [],
+              "style": {
+                "objID": "9cdd1ecc-ad06-4f93-8a6e-0db4d3ce58b5",
+                "useStyle": "default",
+                "conditionalStyles": [],
+                "childStyles": []
+              },
+              "timeline": [],
+              "eventHandlers": [],
+              "widgetFlags": "CLICK_FOCUSABLE|GESTURE_BUBBLE|PRESS_LOCK|SCROLLABLE|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_WITH_ARROW|SNAPPABLE",
+              "hiddenFlagType": "literal",
+              "clickableFlagType": "literal",
+              "checkedStateType": "literal",
+              "disabledStateType": "literal",
+              "states": "",
+              "clickableFlag": false,
+              "scrollSnapX": "",
+              "scrollSnapY": "",
+              "useStyle": "OutlineIcon",
+              "localStyles": {
+                "objID": "3ff82f9b-f9a2-4cd0-8663-ab758f55dda8",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_align": "CENTER"
+                    }
+                  }
+                }
+              },
+              "flagScrollDirection": "",
+              "flagScrollbarMode": "",
+              "group": "",
+              "groupIndex": 0,
+              "children": [],
+              "identifier": "scores_arrow_r",
+              "text": "\uf054",
+              "textType": "literal",
+              "longMode": "CLIP",
+              "recolor": false
+            },
+            {
+              "objID": "6ca796d0-b4a8-49e6-9e02-85e513e5a3e0",
+              "type": "LVGLLabelWidget",
+              "left": 52,
+              "top": 61,
+              "width": 20,
+              "height": 0,
+              "leftUnit": "px",
+              "topUnit": "px",
+              "widthUnit": "px",
+              "heightUnit": "content",
+              "customInputs": [],
+              "customOutputs": [],
+              "style": {
+                "objID": "778af1e5-9b09-494c-ba01-660c6990afa5",
+                "useStyle": "default",
+                "conditionalStyles": [],
+                "childStyles": []
+              },
+              "timeline": [],
+              "eventHandlers": [],
+              "widgetFlags": "CLICK_FOCUSABLE|GESTURE_BUBBLE|PRESS_LOCK|SCROLLABLE|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_WITH_ARROW|SNAPPABLE",
+              "hiddenFlagType": "literal",
+              "clickableFlagType": "literal",
+              "checkedStateType": "literal",
+              "disabledStateType": "literal",
+              "states": "",
+              "clickableFlag": false,
+              "scrollSnapX": "",
+              "scrollSnapY": "",
+              "useStyle": "OutlineIcon",
+              "localStyles": {
+                "objID": "e609c71f-5757-4218-b6cf-89d4c51b14f9",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_align": "CENTER"
+                    }
+                  }
+                }
+              },
+              "flagScrollDirection": "",
+              "flagScrollbarMode": "",
+              "group": "",
+              "groupIndex": 0,
+              "children": [],
+              "identifier": "scores_arrow_l",
+              "text": "\uf053",
+              "textType": "literal",
+              "longMode": "CLIP",
               "recolor": false
             },
             {

@@ -175,6 +175,8 @@ typedef struct _objects_t {
     lv_obj_t *reward_again;
     lv_obj_t *reward_score;
     lv_obj_t *scores_title;
+    lv_obj_t *scores_arrow_r;
+    lv_obj_t *scores_arrow_l;
     lv_obj_t *scores_row_1;
     lv_obj_t *scores_row_2;
     lv_obj_t *scores_row_3;

@@ -1774,7 +1774,29 @@ void create_screen_page_scores() {
             lv_label_set_long_mode(obj, LV_LABEL_LONG_DOT);
             add_style_title_text(obj);
             lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_label_set_text(obj, "Top Scores");
+            lv_label_set_text(obj, "Classic Scores");
+        }
+        {
+            // scores_arrow_r
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.scores_arrow_r = obj;
+            lv_obj_set_pos(obj, 288, 61);
+            lv_obj_set_size(obj, 20, LV_SIZE_CONTENT);
+            lv_label_set_long_mode(obj, LV_LABEL_LONG_CLIP);
+            add_style_outline_icon(obj);
+            lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text_static(obj, "");
+        }
+        {
+            // scores_arrow_l
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.scores_arrow_l = obj;
+            lv_obj_set_pos(obj, 52, 61);
+            lv_obj_set_size(obj, 20, LV_SIZE_CONTENT);
+            lv_label_set_long_mode(obj, LV_LABEL_LONG_CLIP);
+            add_style_outline_icon(obj);
+            lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text_static(obj, "");
         }
         {
             // scores_row_1

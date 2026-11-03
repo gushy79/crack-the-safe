@@ -38,7 +38,7 @@ void app_new_game(game_rules_t rules);
 /** A choice on the Modes page: remembered, then a new game under it. */
 void app_modes_pick(game_rules_t rules);
 void app_menu_settings(void);
-/** The Top-5 Scores page. */
+/** The Top-5 Scores page (the knob flips between the Classic and Lives tables). */
 void app_menu_scores(void);
 /** Back out of the menu, Settings or Headphones, one screen at a time. */
 void app_back(void);
@@ -51,6 +51,8 @@ void app_haptic_step(int steps);
  * score. The rank is 0 for a new best, 1..4 for a place in the table, -1 if it
  * did not make it. */
 const score_table_t *app_scores(void);
+/** Which table the Scores page is showing: 0 Classic, 1 Lives. The knob flips it. */
+int app_scores_view(void);
 uint32_t app_last_score(void);
 int app_last_rank(void);
 
