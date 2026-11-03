@@ -145,6 +145,54 @@ static void make_siren(void)
     }
 }
 
+/* ---- The soft miss (Zen) ----------------------------------------------------
+ *
+ * Where a miss in the other modes gets the siren, Zen gets two soft sine
+ * notes falling a minor third (G4 then E-flat4), like a gentle "aww". Quiet
+ * (SOFT_LEVEL), rounded on both ends so it never clicks. Played on the board
+ * like the vault sounds; bt_link streams it to headphones as it plays. */
+#define SOFT_NOTE1_HZ 392.0f
+#define SOFT_NOTE2_HZ 311.1f
+#define SOFT_NOTE2_AT 0.20f
+#define SOFT_MS       700
+#define SOFT_LEVEL    0.20f
+#define SOFT_SAMPLES  (KNOB_BOARD_AUDIO_RATE / 1000 * SOFT_MS)
+
+static int16_t *s_soft;
+
+/* One soft note: a sine with a touch of 2nd harmonic, a 15 ms attack and a
+ * smooth fall-off. t is seconds since the note began. */
+static float soft_note(float t, float hz)
+{
+    if (t < 0.0f) {
+        return 0.0f;
+    }
+    const float tw = 2.0f * (float)M_PI;
+    const float env = fminf(t / 0.015f, 1.0f) * expf(-t / 0.18f);
+    return env * (sinf(tw * hz * t) + 0.25f * sinf(tw * 2.0f * hz * t));
+}
+
+static void make_soft(void)
+{
+    s_soft = heap_caps_malloc(SOFT_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    if (!s_soft) {
+        s_soft = malloc(SOFT_SAMPLES * sizeof(int16_t));
+    }
+    if (!s_soft) {
+        ESP_LOGE(TAG, "no memory for the soft miss");
+        return;
+    }
+    const int tail = KNOB_BOARD_AUDIO_RATE / 1000 * 40;   /* fade to zero */
+    for (int i = 0; i < SOFT_SAMPLES; i++) {
+        const float t = (float)i / KNOB_BOARD_AUDIO_RATE;
+        float v = soft_note(t, SOFT_NOTE1_HZ) + 1.15f * soft_note(t - SOFT_NOTE2_AT, SOFT_NOTE2_HZ);
+        if (i > SOFT_SAMPLES - tail) {
+            v *= (float)(SOFT_SAMPLES - i) / tail;
+        }
+        s_soft[i] = (int16_t)(v * SOFT_LEVEL * 32767.0f / 1.5f);
+    }
+}
+
 /* ---- Volume -----------------------------------------------------------------
  *
  * Eleven levels on a square-law curve, which sounds roughly even step to
@@ -205,6 +253,7 @@ void sound_init(void)
 {
     make_click();
     make_siren();
+    make_soft();
     sfx_start();
     bt_link_set_clip(SOUND_PIN, s_click, CLICK_SAMPLES, KNOB_BOARD_AUDIO_RATE);
     load_volume();
@@ -227,6 +276,13 @@ void sound_siren(void)
         bt_link_siren(GAME_WRONG_HOLD_MS);
     } else if (s_siren) {
         knob_board_audio_play(s_siren, SIREN_SAMPLES);
+    }
+}
+
+void sound_soft_miss(void)
+{
+    if (s_soft) {
+        knob_board_audio_play(s_soft, SOFT_SAMPLES);
     }
 }
 

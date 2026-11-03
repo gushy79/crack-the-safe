@@ -29,6 +29,7 @@ game_t g_game;
 #define FX_STRONG_CLICK  1     /* opening click */
 #define FX_DOUBLE_CLICK  10    /* number locked in */
 #define FX_SHARP_TICK    24    /* a game starts */
+#define FX_SOFT_BUMP     8     /* a miss in Zen: gentle */
 #define FX_HUM           64    /* the door swinging */
 #define FX_RAMP_UP       82    /* the bolts drawing back */
 #define FX_PAUSE(ms)     (0x80 | ((ms) / 10))
@@ -238,7 +239,13 @@ static void handle(unsigned ev)
          * also cuts a pulse still running), the dial flashes police lights
          * and the siren wails. */
         knob_board_haptic_pulse(0, 0);
-        sound_siren();       /* for as long as the police lights flash */
+        if (g_game.rules == GAME_RULES_ZEN) {
+            /* Practice: a soft bump and a gentle chime, no police. */
+            knob_board_haptic(FX_SOFT_BUMP);
+            sound_soft_miss();
+        } else {
+            sound_siren();   /* for as long as the police lights flash */
+        }
         ESP_LOGI(TAG, "wrong -- attempt %u, new code", g_game.attempts);
     }
     if (ev & GAME_EV_UNLOCKED) {

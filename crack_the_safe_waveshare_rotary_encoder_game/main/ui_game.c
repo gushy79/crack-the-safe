@@ -113,6 +113,9 @@ static void set_dial_rotation(void)
 static void refresh_play(void)
 {
     const bool wrong = g_game.mode == GAME_WRONG;
+    /* Zen's miss is calm: no red, no police lights; "wrong" is still true for
+     * the text and arrows, "harsh" is for the alarming colours. */
+    const bool harsh = wrong && g_game.rules != GAME_RULES_ZEN;
     const int  dir = game_stage_dir(&g_game);
     char buf[16];
 
@@ -125,7 +128,7 @@ static void refresh_play(void)
     snprintf(buf, sizeof(buf), "%lu:%02lu", (unsigned long)(left_s / 60),
              (unsigned long)(left_s % 60));
     ui_lv_set_text(objects.timer_text, buf);
-    ui_lv_set_state_in(objects.timer_text, WRONG, (wrong || left_s <= 10) ? WRONG : 0);
+    ui_lv_set_state_in(objects.timer_text, WRONG, (harsh || left_s <= 10) ? WRONG : 0);
     /* Zen has no clock to show. */
     const bool timed = game_timed(&g_game);
     ui_lv_set_hidden(objects.timer_text, !timed);
@@ -144,13 +147,14 @@ static void refresh_play(void)
     ui_lv_set_text(objects.lives_text, hearts);
     refresh_battery();
     ui_lv_set_text(objects.hint_text,
-                   wrong ? (g_game.timed_out ? "Time's Up" : "Wrong")
+                   wrong ? (g_game.rules == GAME_RULES_ZEN ? "Not quite"
+                                : g_game.timed_out ? "Time's Up" : "Wrong")
                          : dir > 0 ? "Turn Right" : "Turn Left");
     ui_lv_set_hidden(objects.hint_arrow_cw, wrong || dir < 0);
     ui_lv_set_hidden(objects.hint_arrow_ccw, wrong || dir > 0);
 
-    ui_lv_set_state_in(objects.hint_text, WRONG, wrong ? WRONG : 0);
-    ui_lv_set_state_in(objects.dial_index, WRONG, wrong ? WRONG : 0);
+    ui_lv_set_state_in(objects.hint_text, WRONG, harsh ? WRONG : 0);
+    ui_lv_set_state_in(objects.dial_index, WRONG, harsh ? WRONG : 0);
 
     lv_obj_t *const seg[3]     = { objects.seg1, objects.seg2, objects.seg3 };
     lv_obj_t *const seg_cur[3] = { objects.seg1_cur, objects.seg2_cur, objects.seg3_cur };
@@ -160,7 +164,7 @@ static void refresh_play(void)
     for (int k = 0; k < 3; k++) {
         const bool done = k < g_game.locked;
         const bool current = g_game.mode == GAME_PLAY && k == g_game.stage;
-        const lv_state_t st = wrong ? WRONG : done ? DONE : 0;
+        const lv_state_t st = harsh ? WRONG : done ? DONE : 0;
         ui_lv_set_state_in(seg[k], DONE | WRONG, st);
         /* The slot being searched is white in the design: PRESSED, borrowed
          * as a selector on an inert label (SlotText). */
@@ -183,8 +187,8 @@ static void refresh_play(void)
      * photosensitivity risk. */
     const uint32_t t = app_now_ms() - g_game.mode_since_ms;
     const bool red = (t / POLICE_SWAP_MS) % 2 == 0;
-    ui_lv_set_hidden(objects.police_red, !(wrong && red));
-    ui_lv_set_hidden(objects.police_blue, !(wrong && !red));
+    ui_lv_set_hidden(objects.police_red, !(harsh && red));
+    ui_lv_set_hidden(objects.police_blue, !(harsh && !red));
 }
 
 /* ---- Unlocked ---------------------------------------------------------------- */

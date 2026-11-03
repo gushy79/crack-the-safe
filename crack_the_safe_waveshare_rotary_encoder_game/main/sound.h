@@ -21,6 +21,9 @@ void sound_pin(void);
 /** The police siren, for the whole of the loss hold (GAME_WRONG_HOLD_MS). */
 void sound_siren(void);
 
+/** Zen's miss: two soft falling notes instead of the siren. */
+void sound_soft_miss(void);
+
 /** The vault door opening: play the moment the safe opens. */
 void sound_vault_door(void);
 

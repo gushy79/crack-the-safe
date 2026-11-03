@@ -116,6 +116,8 @@ typedef struct {
 /* How long the red "wrong" state -- and the police lights -- are held
  * before play resumes. */
 #define GAME_WRONG_HOLD_MS     2000
+/* Zen is for practice: a miss is a brief, calm pause, not a punishment. */
+#define GAME_ZEN_HOLD_MS       1200
 /* Inputs are ignored this long after opening, so the turn that cracked the
  * safe does not immediately start the next game. */
 #define GAME_REPLAY_LOCKOUT_MS 3500
@@ -134,6 +136,9 @@ unsigned game_start(game_t *g, uint32_t now_ms);
 
 /** Pick the rules for the next game_new(). Does not disturb a game in play. */
 void game_set_rules(game_t *g, game_rules_t rules);
+
+/** How long the "wrong" state holds before play resumes. */
+uint32_t game_wrong_hold_ms(const game_t *g);
 
 /** False in Zen: there is no clock to run out. */
 bool game_timed(const game_t *g);

@@ -314,6 +314,11 @@ void game_set_rules(game_t *g, game_rules_t rules)
     g->rules = rules < GAME_RULES_COUNT ? rules : GAME_RULES_CLASSIC;
 }
 
+uint32_t game_wrong_hold_ms(const game_t *g)
+{
+    return g->rules == GAME_RULES_ZEN ? GAME_ZEN_HOLD_MS : GAME_WRONG_HOLD_MS;
+}
+
 bool game_timed(const game_t *g)
 {
     return g->rules != GAME_RULES_ZEN;
@@ -375,7 +380,7 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
         return ev | GAME_EV_TIMEOUT;
     }
     if (g->mode == GAME_WRONG && g->rules == GAME_RULES_LIVES && g->lives > 0 &&
-        now_ms - g->mode_since_ms >= GAME_WRONG_HOLD_MS) {
+        now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
         /* A life lost, not the game: the same code again from number 1, the
          * dial back where the code was dealt from. The clock kept its value
          * through the red hold, so the hold costs no time. */
@@ -393,7 +398,7 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
         set_mode(g, GAME_PLAY, now_ms);
         return GAME_EV_RESUMED | GAME_EV_RETRY;
     }
-    if (g->mode == GAME_WRONG && now_ms - g->mode_since_ms >= GAME_WRONG_HOLD_MS) {
+    if (g->mode == GAME_WRONG && now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
         /* A new game: dial back to 0, fresh numbers dealt from there, the
          * attempt count and the clock restarted. */
         g->ticks = 0;

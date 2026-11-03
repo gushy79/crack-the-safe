@@ -821,6 +821,33 @@ static void test_codes_do_not_depend_on_the_feel_rolls(void)
     }
 }
 
+static void test_zen_miss_is_a_shorter_pause_than_other_modes(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_ZEN);
+    lose(&g);
+    CHECK(g.mode == GAME_WRONG);
+    CHECK(game_wrong_hold_ms(&g) == GAME_ZEN_HOLD_MS);
+    CHECK(GAME_ZEN_HOLD_MS < GAME_WRONG_HOLD_MS);
+    const uint32_t t = g.mode_since_ms;
+    CHECK(game_tick(&g, t + GAME_ZEN_HOLD_MS - 1) == GAME_EV_NONE);
+    CHECK(g.mode == GAME_WRONG);
+    CHECK(game_tick(&g, t + GAME_ZEN_HOLD_MS) & GAME_EV_RESUMED);
+    CHECK(g.mode == GAME_PLAY);
+}
+
+static void test_classic_and_lives_keep_the_full_hold(void)
+{
+    game_t c, l;
+    begin_rules(&c, 5, GAME_RULES_CLASSIC);
+    begin_rules(&l, 5, GAME_RULES_LIVES);
+    CHECK(game_wrong_hold_ms(&c) == GAME_WRONG_HOLD_MS);
+    CHECK(game_wrong_hold_ms(&l) == GAME_WRONG_HOLD_MS);
+    lose(&c);
+    CHECK(game_tick(&c, c.mode_since_ms + GAME_ZEN_HOLD_MS) == GAME_EV_NONE);
+    CHECK(c.mode == GAME_WRONG);
+}
+
 int main(void)
 {
     RUN(test_init_is_title);
@@ -875,6 +902,8 @@ int main(void)
     RUN(test_zen_has_no_clock_and_no_score);
     RUN(test_rules_survive_reset_and_bad_values_fall_back);
     RUN(test_codes_do_not_depend_on_the_feel_rolls);
+    RUN(test_zen_miss_is_a_shorter_pause_than_other_modes);
+    RUN(test_classic_and_lives_keep_the_full_hold);
 
     printf("\n%d checks, %d failed\n", s_checks, s_failed);
     return s_failed ? 1 : 0;
