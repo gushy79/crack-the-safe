@@ -26,6 +26,12 @@ extern void action_headphones_info_close(lv_event_t * e);
 extern void action_headphones_forget(lv_event_t * e);
 extern void action_menu_scores(lv_event_t * e);
 extern void action_scores_back(lv_event_t * e);
+extern void action_modes_classic(lv_event_t * e);
+extern void action_modes_lives(lv_event_t * e);
+extern void action_modes_zen(lv_event_t * e);
+extern void action_modes_back(lv_event_t * e);
+extern void action_settings_haptic_down(lv_event_t * e);
+extern void action_settings_haptic_up(lv_event_t * e);
 
 #ifdef __cplusplus
 }

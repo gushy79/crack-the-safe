@@ -14,11 +14,13 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "app.h"
 #include "bt_link.h"
 #include "knob_board.h"
 #include "screens.h"
+#include "settings.h"
 #include "sound.h"
 #include "ui_lv.h"
 
@@ -124,9 +126,22 @@ static void refresh_play(void)
              (unsigned long)(left_s % 60));
     ui_lv_set_text(objects.timer_text, buf);
     ui_lv_set_state_in(objects.timer_text, WRONG, (wrong || left_s <= 10) ? WRONG : 0);
+    /* Zen has no clock to show. */
+    const bool timed = game_timed(&g_game);
+    ui_lv_set_hidden(objects.timer_text, !timed);
 
-    snprintf(buf, sizeof(buf), "Level %u", g_game.level ? g_game.level : 1);
+    snprintf(buf, sizeof(buf), timed ? "Level %u" : "Zen \xC2\xB7 Level %u",
+             g_game.level ? g_game.level : 1);
     ui_lv_set_text(objects.level_text, buf);
+
+    /* Lives: one heart (U+F004, icon font) for each chance left. */
+    char hearts[16] = "";
+    if (g_game.rules == GAME_RULES_LIVES) {
+        for (unsigned n = 0; n < g_game.lives && n < GAME_LIVES; n++) {
+            strcat(hearts, "\xEF\x80\x84");
+        }
+    }
+    ui_lv_set_text(objects.lives_text, hearts);
     refresh_battery();
     ui_lv_set_text(objects.hint_text,
                    wrong ? (g_game.timed_out ? "Time's Up" : "Wrong")
@@ -242,8 +257,12 @@ static void refresh_unlocked(void)
              g_game.code[0], g_game.code[1], g_game.code[2]);
     ui_lv_set_text(objects.reward_code, buf);
     const uint32_t s = (game_time_left_ms(&g_game, app_now_ms()) + 999) / 1000;
-    snprintf(buf, sizeof(buf), "Level %u \xC2\xB7 %lu:%02lu left", g_game.level,
-             (unsigned long)(s / 60), (unsigned long)(s % 60));
+    if (game_timed(&g_game)) {
+        snprintf(buf, sizeof(buf), "Level %u \xC2\xB7 %lu:%02lu left", g_game.level,
+                 (unsigned long)(s / 60), (unsigned long)(s % 60));
+    } else {
+        snprintf(buf, sizeof(buf), "Level %u", g_game.level);
+    }
     ui_lv_set_text(objects.reward_meta, buf);
     /* The score, and whether it made the Top 5 (rank 0 = a new best). */
     char num[16];
@@ -255,6 +274,9 @@ static void refresh_unlocked(void)
         snprintf(buf, sizeof(buf), "Score %s \xC2\xB7 #%d", num, rank + 1);
     } else {
         snprintf(buf, sizeof(buf), "Score %s", num);
+    }
+    if (g_game.rules == GAME_RULES_ZEN) {
+        snprintf(buf, sizeof(buf), "Zen \xC2\xB7 no score");
     }
     ui_lv_set_text(objects.reward_score, buf);
     const int next = game_next_level(&g_game);
@@ -381,6 +403,16 @@ static void refresh_settings(void)
     ui_lv_set_state_in(objects.settings_vol_down_icon, WRONG, at_min);
     ui_lv_set_state_in(objects.settings_vol_up, WRONG, at_max);
     ui_lv_set_state_in(objects.settings_vol_up_icon, WRONG, at_max);
+
+    const int hs = settings_haptic();
+    snprintf(buf, sizeof(buf), "%d", hs);
+    ui_lv_set_text(objects.settings_hap_value, buf);
+    const lv_state_t h_min = hs == HAPTIC_MIN ? WRONG : 0;
+    const lv_state_t h_max = hs == HAPTIC_MAX ? WRONG : 0;
+    ui_lv_set_state_in(objects.settings_hap_down, WRONG, h_min);
+    ui_lv_set_state_in(objects.settings_hap_down_icon, WRONG, h_min);
+    ui_lv_set_state_in(objects.settings_hap_up, WRONG, h_max);
+    ui_lv_set_state_in(objects.settings_hap_up_icon, WRONG, h_max);
 }
 
 /* ---- Top Scores ------------------------------------------------------------ */
@@ -394,6 +426,8 @@ static void refresh_scores(void)
         objects.scores_row_4, objects.scores_row_5,
     };
     const score_table_t *t = app_scores();
+    ui_lv_set_text(objects.scores_title,
+                   g_game.rules == GAME_RULES_LIVES ? "Lives Scores" : "Top Scores");
     for (int i = 0; i < SCORES_MAX; i++) {
         char buf[40];
         if (i < t->count) {

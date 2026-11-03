@@ -35,6 +35,8 @@ void app_menu(void);
 void app_menu_new_game(void);
 /** A new game under the given rules (Classic, Lives, Zen). */
 void app_new_game(game_rules_t rules);
+/** A choice on the Modes page: remembered, then a new game under it. */
+void app_modes_pick(game_rules_t rules);
 void app_menu_settings(void);
 /** The Top-5 Scores page. */
 void app_menu_scores(void);
@@ -42,6 +44,8 @@ void app_menu_scores(void);
 void app_back(void);
 /** Settings' Volume -/+ (and the knob, while Settings is up). */
 void app_volume_step(int steps);
+/** Settings' Haptics -/+. */
+void app_haptic_step(int steps);
 
 /* High scores (the table for the current mode) and the last opened safe's
  * score. The rank is 0 for a new best, 1..4 for a place in the table, -1 if it

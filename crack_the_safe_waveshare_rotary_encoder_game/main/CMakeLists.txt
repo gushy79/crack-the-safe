@@ -38,7 +38,7 @@ endif()
 # build made before the first export would never notice the export appear.
 if(UI_CORE)
     set(APP_HAVE_UI 1)
-    set(APP_SRCS "game.c" "scores.c" "score_store.c" "app.c" "ui_game.c"
+    set(APP_SRCS "game.c" "scores.c" "score_store.c" "settings.c" "app.c" "ui_game.c"
                  "actions.c" "bt_link.c" "sound.c" "sfx.c")
     # Only registered when present: ESP-IDF rejects an include directory that
     # does not exist, which would break the build the moment main/ui/ is

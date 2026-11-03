@@ -19,7 +19,8 @@ enum ScreensEnum {
     SCREEN_ID_PAGE_PLAY = 6,
     SCREEN_ID_PAGE_UNLOCKED = 7,
     SCREEN_ID_PAGE_SCORES = 8,
-    _SCREEN_ID_LAST = 8
+    SCREEN_ID_PAGE_MODES = 9,
+    _SCREEN_ID_LAST = 9
 };
 
 typedef struct _objects_t {
@@ -31,6 +32,7 @@ typedef struct _objects_t {
     lv_obj_t *page_play;
     lv_obj_t *page_unlocked;
     lv_obj_t *page_scores;
+    lv_obj_t *page_modes;
     lv_obj_t *title_ring;
     lv_obj_t *title_bolts;
     lv_obj_t *title_bolt_slots;
@@ -71,6 +73,14 @@ typedef struct _objects_t {
     lv_obj_t *settings_vol_value;
     lv_obj_t *settings_vol_up;
     lv_obj_t *settings_vol_up_icon;
+    lv_obj_t *settings_hap;
+    lv_obj_t *settings_hap_icon;
+    lv_obj_t *settings_hap_text;
+    lv_obj_t *settings_hap_down;
+    lv_obj_t *settings_hap_down_icon;
+    lv_obj_t *settings_hap_value;
+    lv_obj_t *settings_hap_up;
+    lv_obj_t *settings_hap_up_icon;
     lv_obj_t *settings_back;
     lv_obj_t *settings_back_text;
     lv_obj_t *hp_title;
@@ -121,6 +131,7 @@ typedef struct _objects_t {
     lv_obj_t *level_text;
     lv_obj_t *battery_icon;
     lv_obj_t *timer_text;
+    lv_obj_t *lives_text;
     lv_obj_t *slot1;
     lv_obj_t *slot1_line;
     lv_obj_t *slot1_cur;
@@ -171,6 +182,15 @@ typedef struct _objects_t {
     lv_obj_t *scores_row_5;
     lv_obj_t *scores_back;
     lv_obj_t *scores_back_text;
+    lv_obj_t *modes_title;
+    lv_obj_t *modes_classic;
+    lv_obj_t *modes_classic_text;
+    lv_obj_t *modes_lives;
+    lv_obj_t *modes_lives_text;
+    lv_obj_t *modes_zen;
+    lv_obj_t *modes_zen_text;
+    lv_obj_t *modes_back;
+    lv_obj_t *modes_back_text;
 } objects_t;
 
 extern objects_t objects;
@@ -198,6 +218,9 @@ void tick_screen_page_unlocked();
 
 void create_screen_page_scores();
 void tick_screen_page_scores();
+
+void create_screen_page_modes();
+void tick_screen_page_modes();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

@@ -6,7 +6,8 @@
  *        ignores it during the replay lockout).
  * Start: the Start button on the instructions. Deals the first code.
  * Menu:  every game screen's LONG_PRESSED handler -- touch and hold for the
- *        menu: New Game, Scores, Settings, Back.
+ *        menu: New Game (opens the Modes page), Scores, Settings, Back.
+ * Modes*: the Modes page's Classic, Lives, Zen and Back.
  * Menu*, Settings*, Scores*: the menu's, the Settings screen's (the volume's
  *        - and + among them) and the Top Scores screen's buttons.
  * Headphones*: the Bluetooth pairing screen. HeadphonesSelect carries the
@@ -65,6 +66,42 @@ void action_scores_back(lv_event_t *e)
 {
     (void)e;
     app_back();
+}
+
+void action_modes_classic(lv_event_t *e)
+{
+    (void)e;
+    app_modes_pick(GAME_RULES_CLASSIC);
+}
+
+void action_modes_lives(lv_event_t *e)
+{
+    (void)e;
+    app_modes_pick(GAME_RULES_LIVES);
+}
+
+void action_modes_zen(lv_event_t *e)
+{
+    (void)e;
+    app_modes_pick(GAME_RULES_ZEN);
+}
+
+void action_modes_back(lv_event_t *e)
+{
+    (void)e;
+    app_back();
+}
+
+void action_settings_haptic_down(lv_event_t *e)
+{
+    (void)e;
+    app_haptic_step(-1);
+}
+
+void action_settings_haptic_up(lv_event_t *e)
+{
+    (void)e;
+    app_haptic_step(1);
 }
 
 void action_settings_headphones(lv_event_t *e)

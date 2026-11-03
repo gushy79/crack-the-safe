@@ -16,6 +16,7 @@
 #include "score_store.h"
 #include "scores.h"
 #include "screens.h"
+#include "settings.h"
 #include "sound.h"
 #include "ui.h"
 #include "ui_game.h"
@@ -135,7 +136,7 @@ int app_door_frame_at(uint32_t t)
  * of whatever the game is showing. While anything is on it the game is paused:
  * no turns, taps or ticks reach it and its clock is stopped. */
 
-typedef enum { OVER_MENU, OVER_SETTINGS, OVER_HEADPHONES, OVER_SCORES } over_t;
+typedef enum { OVER_MENU, OVER_SETTINGS, OVER_HEADPHONES, OVER_SCORES, OVER_MODES } over_t;
 
 #define OVER_MAX 3
 static over_t s_over[OVER_MAX];
@@ -155,6 +156,7 @@ static void show_screen_for_mode(void)
         case OVER_MENU:     want = SCREEN_ID_PAGE_MENU;       break;
         case OVER_SETTINGS: want = SCREEN_ID_PAGE_SETTINGS;   break;
         case OVER_SCORES:   want = SCREEN_ID_PAGE_SCORES;     break;
+        case OVER_MODES:    want = SCREEN_ID_PAGE_MODES;      break;
         default:            want = SCREEN_ID_PAGE_HEADPHONES; break;
         }
     } else {
@@ -254,6 +256,8 @@ static void handle(unsigned ev)
     }
 }
 
+static void buzz(int level, uint32_t hold_ms);
+
 /* Set the buzz for where the dial now is. */
 static void feel(void)
 {
@@ -263,7 +267,7 @@ static void feel(void)
     if (g_game.on_target) {
         /* Full when the hit was felt; silent when it came too fast to feel,
          * which is the cue a speeding player misses. */
-        knob_board_haptic_pulse(g_game.hit_felt ? FEEL_FULL : 0, FEEL_HOLD_MS);
+        buzz(g_game.hit_felt ? FEEL_FULL : 0, FEEL_HOLD_MS);
         return;
     }
     const int d = game_distance(&g_game);
@@ -273,7 +277,7 @@ static void feel(void)
         return;
     }
     const int level = FEEL_MAX - (FEEL_MAX - FEEL_MIN) * (d - 1) / (range - 1);
-    knob_board_haptic_pulse((uint8_t)level, FEEL_HOLD_MS);
+    buzz(level, FEEL_HOLD_MS);
 }
 
 void app_rotate(int detents)
@@ -332,9 +336,17 @@ void app_new_game(game_rules_t rules)
     ui_game_refresh();
 }
 
+/* New Game from the menu opens the Modes page; picking a mode starts it. */
 void app_menu_new_game(void)
 {
-    app_new_game(g_game.rules);             /* the Modes page comes in Step 4 */
+    over_push(OVER_MODES);
+    ui_game_refresh();
+}
+
+void app_modes_pick(game_rules_t rules)
+{
+    settings_set_rules((int)rules);         /* remembered for next time */
+    app_new_game(rules);
 }
 
 void app_menu_settings(void)
@@ -359,6 +371,21 @@ void app_volume_step(int steps)
 {
     sound_set_volume(sound_volume() + steps);
     ui_game_refresh();
+}
+
+/* The strength steps apply to the number-finding buzz; a short buzz at the new
+ * strength lets the player feel what they chose. */
+void app_haptic_step(int steps)
+{
+    settings_set_haptic(settings_haptic() + steps);
+    knob_board_haptic_pulse(haptic_scale(FEEL_FULL, settings_haptic()), 300);
+    ui_game_refresh();
+}
+
+/* Every buzz that tells the player where the number is goes through here. */
+static void buzz(int level, uint32_t hold_ms)
+{
+    knob_board_haptic_pulse(haptic_scale((uint8_t)level, settings_haptic()), hold_ms);
 }
 
 /* ---- Headphones ------------------------------------------------------------- */
@@ -432,7 +459,9 @@ void app_init(uint32_t seed)
     for (int m = 0; m < SCORE_MODES; m++) {
         score_store_load(m, &s_scores[m]);
     }
+    settings_init();
     game_init(&g_game, seed);
+    game_set_rules(&g_game, (game_rules_t)settings_rules());
     ui_game_refresh();
     lv_timer_create(app_timer_cb, 20, NULL);
 }
