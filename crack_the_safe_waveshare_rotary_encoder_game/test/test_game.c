@@ -848,6 +848,24 @@ static void test_classic_and_lives_keep_the_full_hold(void)
     CHECK(c.mode == GAME_WRONG);
 }
 
+static void test_lives_refill_when_the_levels_wrap_to_a_new_cycle(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    g.level = GAME_LEVELS;               /* as if levels 1-7 were cleared */
+    lose(&g);
+    hold_red(&g);                        /* a life gone, retrying level 8 */
+    CHECK(g.lives == GAME_LIVES - 1);
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        solve_stage(&g);
+    }
+    CHECK(g.mode == GAME_UNLOCKED);
+    s_now += GAME_REPLAY_LOCKOUT_MS;
+    game_tap(&g, s_now);
+    CHECK(g.level == 1);                 /* a new cycle ... */
+    CHECK(g.lives == GAME_LIVES);        /* ... starts with full lives */
+}
+
 int main(void)
 {
     RUN(test_init_is_title);
@@ -902,6 +920,7 @@ int main(void)
     RUN(test_zen_has_no_clock_and_no_score);
     RUN(test_rules_survive_reset_and_bad_values_fall_back);
     RUN(test_codes_do_not_depend_on_the_feel_rolls);
+    RUN(test_lives_refill_when_the_levels_wrap_to_a_new_cycle);
     RUN(test_zen_miss_is_a_shorter_pause_than_other_modes);
     RUN(test_classic_and_lives_keep_the_full_hold);
 

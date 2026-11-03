@@ -2,6 +2,7 @@
  * Host-side tests for main/scores.c (the Top-5 table, no hardware).
  * Build and run with `make -C test` (see test/Makefile).
  */
+#include "game.h"
 #include "scores.h"
 
 #include <stdio.h>
@@ -164,6 +165,28 @@ static void test_valid_rejects_corrupt_tables(void)
     CHECK(!scores_valid(&bad));
 }
 
+static void test_valid_rejects_implausible_entries(void)
+{
+    score_table_t t;
+    scores_clear(&t);
+    scores_insert(&t, E(500, GAME_LEVELS, 300));       /* the extremes are fine */
+    CHECK(scores_valid(&t));
+
+    score_table_t bad = t;
+    bad.e[0].level = 0;
+    CHECK(!scores_valid(&bad));
+    bad.e[0].level = GAME_LEVELS + 1;
+    CHECK(!scores_valid(&bad));
+    bad.e[0].level = 200;
+    CHECK(!scores_valid(&bad));
+
+    bad = t;
+    bad.e[0].left_s = 301;                             /* longer than any clock */
+    CHECK(!scores_valid(&bad));
+    bad.e[0].left_s = 0xFFFF;
+    CHECK(!scores_valid(&bad));
+}
+
 static void test_thousands_separators(void)
 {
     char b[16];
@@ -201,6 +224,7 @@ int main(void)
     RUN(test_new_best_into_a_full_table);
     RUN(test_table_never_breaks_under_many_inserts);
     RUN(test_valid_rejects_corrupt_tables);
+    RUN(test_valid_rejects_implausible_entries);
     RUN(test_thousands_separators);
     RUN(test_thousands_truncates_safely);
 

@@ -4,6 +4,8 @@
 
 #include "scores.h"
 
+#include "game.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -52,6 +54,10 @@ bool scores_valid(const score_table_t *t)
     for (int i = 0; i < t->count; i++) {
         if (t->e[i].score == 0) {
             return false;
+        }
+        if (t->e[i].level < 1 || t->e[i].level > GAME_LEVELS ||
+            t->e[i].left_s > SCORES_MAX_LEFT_S) {
+            return false;                  /* not something the game could write */
         }
         if (i > 0 && t->e[i].score > t->e[i - 1].score) {
             return false;

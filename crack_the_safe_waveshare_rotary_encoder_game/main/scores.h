@@ -12,6 +12,8 @@
 #include <stdint.h>
 
 #define SCORES_MAX 5
+/* The longest clock is 5:00, so no entry can have more seconds left. */
+#define SCORES_MAX_LEFT_S 300
 
 typedef struct {
     uint32_t score;

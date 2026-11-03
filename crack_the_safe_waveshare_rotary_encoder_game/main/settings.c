@@ -54,8 +54,11 @@ int settings_haptic(void)
 
 void settings_set_haptic(int strength)
 {
-    s_haptic = strength < HAPTIC_MIN ? HAPTIC_MIN : strength > HAPTIC_MAX ? HAPTIC_MAX : strength;
-    save_u8("haptic", (uint8_t)s_haptic);
+    strength = strength < HAPTIC_MIN ? HAPTIC_MIN : strength > HAPTIC_MAX ? HAPTIC_MAX : strength;
+    if (strength != s_haptic) {            /* a tap at the end stop writes nothing */
+        s_haptic = strength;
+        save_u8("haptic", (uint8_t)s_haptic);
+    }
 }
 
 int settings_rules(void)

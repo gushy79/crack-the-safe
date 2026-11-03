@@ -67,6 +67,7 @@ static bool s_prize_played;
 static score_table_t s_scores[SCORE_MODES];
 static uint32_t s_last_score;
 static int s_last_rank = -1;       /* 0 = new best, -1 = not in the table */
+static int s_save_mode = -1;       /* a table waiting to be saved, or -1 */
 
 /* The table for the current rules; Zen shows the Classic one (it records
  * nothing of its own). */
@@ -92,9 +93,21 @@ static void record_score(void)
     const int m = score_mode();
     s_last_rank = scores_insert(&s_scores[m], e);
     if (s_last_rank >= 0) {
-        score_store_save(m, &s_scores[m]);
+        /* Saved a little later (flush_scores): the flash commit stalls the
+         * screen, and this is the moment the door animation starts. */
+        s_save_mode = m;
     }
     ESP_LOGI(TAG, "score %lu, rank %d", (unsigned long)s_last_score, s_last_rank);
+}
+
+/* Write a waiting table to flash; a failure is logged, and the table stays in
+ * memory (it is only lost if the power goes before the next win). */
+static void flush_scores(void)
+{
+    if (s_save_mode >= 0) {
+        score_store_save(s_save_mode, &s_scores[s_save_mode]);
+        s_save_mode = -1;
+    }
 }
 
 const score_table_t *app_scores(void)
@@ -446,6 +459,7 @@ static void app_timer_cb(lv_timer_t *t)
 {
     (void)t;
     if (s_depth) {
+        flush_scores();                     /* nothing is animating now */
         ui_game_refresh();                  /* paused: only the menus move */
         return;
     }
@@ -467,6 +481,10 @@ static void app_timer_cb(lv_timer_t *t)
         app_unlock_ms() >= UNLOCK_REWARD_MS) {
         sound_prize(g_game.level);
         s_prize_played = true;
+    }
+    /* The door has finished opening and the prize sound is under way. */
+    if (g_game.mode != GAME_UNLOCKED || app_unlock_ms() >= UNLOCK_REWARD_MS + 500) {
+        flush_scores();
     }
     ui_game_refresh();
 }

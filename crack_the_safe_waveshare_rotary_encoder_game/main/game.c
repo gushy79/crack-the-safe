@@ -120,7 +120,8 @@ static unsigned start_round(game_t *g, uint32_t now_ms)
     /* A fresh game starts with full lives; a win carries what is left. */
     if (g->rules != GAME_RULES_LIVES) {
         g->lives = 0;
-    } else if (g->mode != GAME_UNLOCKED) {
+    } else if (g->mode != GAME_UNLOCKED || g->level == 1) {
+        /* A fresh game, or the levels wrapping round to a new cycle. */
         g->lives = GAME_LIVES;
     }
     g->timed_out = false;

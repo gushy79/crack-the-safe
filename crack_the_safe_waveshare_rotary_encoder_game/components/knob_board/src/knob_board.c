@@ -5,6 +5,8 @@
 #include <stdatomic.h>
 
 #include "driver/ledc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
@@ -38,6 +40,10 @@ typedef enum { SCREEN_AWAKE = 0, SCREEN_DIM, SCREEN_OFF } screen_state_t;
 static _Atomic int      s_screen = SCREEN_AWAKE;
 static _Atomic uint32_t s_last_input_ms;
 static uint8_t          s_bright;            /* what "awake" means, 0-100 */
+/* Serialises a state change with the backlight write that goes with it, so an
+ * input and the idle timer cannot leave the state and the light disagreeing. */
+static SemaphoreHandle_t s_screen_lock;
+static StaticSemaphore_t s_screen_lock_buf;
 
 static uint32_t now_ms(void)
 {
@@ -58,10 +64,12 @@ static esp_err_t backlight_apply(uint8_t percent)
 bool board_note_input(void)
 {
     atomic_store(&s_last_input_ms, now_ms());
+    xSemaphoreTake(s_screen_lock, portMAX_DELAY);
     const int was = atomic_exchange(&s_screen, SCREEN_AWAKE);
     if (was != SCREEN_AWAKE) {
         backlight_apply(s_bright);
     }
+    xSemaphoreGive(s_screen_lock);
     return was == SCREEN_OFF;
 }
 
@@ -73,25 +81,26 @@ uint32_t knob_board_idle_ms(void)
 static void idle_cb(void *arg)
 {
     (void)arg;
+    xSemaphoreTake(s_screen_lock, portMAX_DELAY);
+    /* Decided under the lock, so an input that just woke the screen has
+     * already refreshed the idle clock and is not put back to sleep. */
     const uint32_t idle = knob_board_idle_ms();
-    int cur = atomic_load(&s_screen);
-    /* compare-exchange: an input that lands between the read and the change
-     * has already woken the screen, and must not be put back to sleep. */
+    const int cur = atomic_load(&s_screen);
     if (idle >= SCREEN_OFF_MS && cur != SCREEN_OFF) {
-        if (atomic_compare_exchange_strong(&s_screen, &cur, SCREEN_OFF)) {
-            backlight_apply(0);
-            ESP_LOGI(TAG, "screen off");
-        }
+        atomic_store(&s_screen, SCREEN_OFF);
+        backlight_apply(0);
+        ESP_LOGI(TAG, "screen off");
     } else if (idle >= SCREEN_DIM_MS && idle < SCREEN_OFF_MS && cur == SCREEN_AWAKE) {
-        if (atomic_compare_exchange_strong(&s_screen, &cur, SCREEN_DIM)) {
-            backlight_apply((uint8_t)(s_bright * SCREEN_DIM_PERCENT / 100));
-            ESP_LOGI(TAG, "screen dimmed");
-        }
+        atomic_store(&s_screen, SCREEN_DIM);
+        backlight_apply((uint8_t)(s_bright * SCREEN_DIM_PERCENT / 100));
+        ESP_LOGI(TAG, "screen dimmed");
     }
+    xSemaphoreGive(s_screen_lock);
 }
 
 static esp_err_t idle_timer_start(void)
 {
+    s_screen_lock = xSemaphoreCreateMutexStatic(&s_screen_lock_buf);
     atomic_store(&s_last_input_ms, now_ms());
     static const esp_timer_create_args_t args = {
         .callback = idle_cb,
@@ -130,9 +139,12 @@ static esp_err_t backlight_init(void)
 
 esp_err_t knob_board_backlight_set(uint8_t percent)
 {
+    xSemaphoreTake(s_screen_lock, portMAX_DELAY);
     s_bright = percent > 100 ? 100 : percent;
     /* Remembered, and shown now only if the screen is awake. */
-    return atomic_load(&s_screen) == SCREEN_AWAKE ? backlight_apply(s_bright) : ESP_OK;
+    const esp_err_t err = atomic_load(&s_screen) == SCREEN_AWAKE ? backlight_apply(s_bright) : ESP_OK;
+    xSemaphoreGive(s_screen_lock);
+    return err;
 }
 
 esp_err_t knob_board_init(void)
