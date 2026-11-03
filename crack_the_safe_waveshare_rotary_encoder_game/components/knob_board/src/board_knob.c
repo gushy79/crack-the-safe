@@ -86,7 +86,9 @@ static void deliver_cb(lv_timer_t *t)
     if (diff == 0) {
         return;
     }
-    board_note_input();
+    if (board_note_input()) {
+        return;                  /* this turn only woke the screen */
+    }
     if (s_cb) {
         s_cb(diff, s_cb_ctx);
     }

@@ -40,8 +40,13 @@ esp_err_t knob_board_init(void);
 bool knob_board_lock(uint32_t timeout_ms);
 void knob_board_unlock(void);
 
-/** Backlight 0-100, LEDC PWM. */
+/** Backlight 0-100, LEDC PWM. This is the "awake" brightness: the screen dims
+ *  and then switches off by itself when idle (knob_board.c), and any touch or
+ *  turn wakes it. */
 esp_err_t knob_board_backlight_set(uint8_t percent);
+
+/** Milliseconds since the last touch or knob turn. */
+uint32_t knob_board_idle_ms(void);
 
 /** The touch input device. NULL if the CST816 did not start. */
 lv_indev_t *knob_board_touch_indev(void);

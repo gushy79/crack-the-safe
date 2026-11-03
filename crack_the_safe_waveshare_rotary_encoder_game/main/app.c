@@ -431,6 +431,10 @@ void app_headphones_forget(void)
 }
 
 /* 20 ms, in the LVGL task: the red hold, the unlock timeline, the refresh. */
+/* A clock that runs out this long after the last touch or turn means the
+ * player has walked away. */
+#define ABANDON_MS 30000
+
 static void app_timer_cb(lv_timer_t *t)
 {
     (void)t;
@@ -438,7 +442,15 @@ static void app_timer_cb(lv_timer_t *t)
         ui_game_refresh();                  /* paused: only the menus move */
         return;
     }
-    handle(game_tick(&g_game, app_now_ms()));
+    unsigned ev = game_tick(&g_game, app_now_ms());
+    if ((ev & GAME_EV_TIMEOUT) && knob_board_idle_ms() >= ABANDON_MS) {
+        /* Nobody is there: no siren, and no new game starting itself over and
+         * over on a dark screen. Back to the title to wait. */
+        ESP_LOGI(TAG, "clock ran out with nobody playing: back to the title");
+        knob_board_haptic_pulse(0, 0);
+        ev = game_reset(&g_game, app_now_ms());
+    }
+    handle(ev);
     if (g_game.mode == GAME_UNLOCKED && !s_hum_played &&
         app_unlock_ms() >= UNLOCK_DOOR_START_MS) {
         knob_board_haptic(FX_HUM);

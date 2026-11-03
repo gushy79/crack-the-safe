@@ -24,14 +24,23 @@ static lv_indev_t            *s_indev;
 static lv_indev_read_cb_t     s_port_read_cb;
 
 /* In front of esp_lvgl_port's own read callback: note activity for the idle
- * timeout, then let the port do the work. */
+ * timeout, then let the port do the work. A press that only woke the screen is hidden
+ * from LVGL until the finger lifts. */
 static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
+    static bool swallowing;          /* the press that woke a dark screen */
     if (s_port_read_cb) {
         s_port_read_cb(indev, data);
     }
     if (data->state == LV_INDEV_STATE_PRESSED) {
-        board_note_input();
+        if (board_note_input()) {
+            swallowing = true;
+        }
+        if (swallowing) {
+            data->state = LV_INDEV_STATE_RELEASED;   /* LVGL never sees it */
+        }
+    } else {
+        swallowing = false;
     }
 }
 
