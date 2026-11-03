@@ -60,15 +60,17 @@ static int feel_range(void)
 static bool s_hum_played;
 static bool s_prize_played;
 
-/* High scores: one Top-5 table per scored mode (Classic only for now), kept in
- * NVS. The last opened safe's score and rank are what the vault screen shows. */
+/* High scores: one Top-5 table per scored mode (Classic, Lives; Zen is not
+ * scored), kept in NVS. The last opened safe's score and rank are what the vault screen shows. */
 static score_table_t s_scores[SCORE_MODES];
 static uint32_t s_last_score;
 static int s_last_rank = -1;       /* 0 = new best, -1 = not in the table */
 
+/* The table for the current rules; Zen shows the Classic one (it records
+ * nothing of its own). */
 static int score_mode(void)
 {
-    return 0;                      /* Classic; Lives gets its own table later */
+    return g_game.rules == GAME_RULES_LIVES ? 1 : 0;
 }
 
 /* The safe just opened: score it and, if it makes the table, save it. */
@@ -76,6 +78,10 @@ static void record_score(void)
 {
     const uint32_t now = app_now_ms();
     s_last_score = game_current_score(&g_game, now);
+    if (s_last_score == 0) {       /* Zen, or no time left: nothing to record */
+        s_last_rank = -1;
+        return;
+    }
     const score_entry_t e = {
         .score  = s_last_score,
         .level  = g_game.level,
@@ -214,6 +220,10 @@ static void handle(unsigned ev)
         ESP_LOGI(TAG, "new code dealt");
         knob_board_haptic(FX_SHARP_TICK);
     }
+    if (ev & GAME_EV_RETRY) {
+        ESP_LOGI(TAG, "life lost, %u left -- same code again", g_game.lives);
+        knob_board_haptic(FX_SHARP_TICK);
+    }
     if (ev & GAME_EV_HIT) {
         sound_pin();
     }
@@ -311,14 +321,20 @@ void app_menu(void)
     }
 }
 
-void app_menu_new_game(void)
+void app_new_game(game_rules_t rules)
 {
     s_depth = 0;                            /* the paused game is dropped */
     sound_stop();                           /* a siren still wailing */
+    game_set_rules(&g_game, rules);
     const unsigned ev = game_new(&g_game, app_now_ms());
-    ESP_LOGI(TAG, "new game");
+    ESP_LOGI(TAG, "new game, rules %d", (int)g_game.rules);
     handle(ev);
     ui_game_refresh();
+}
+
+void app_menu_new_game(void)
+{
+    app_new_game(g_game.rules);             /* the Modes page comes in Step 4 */
 }
 
 void app_menu_settings(void)

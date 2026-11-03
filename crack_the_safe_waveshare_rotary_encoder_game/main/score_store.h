@@ -8,9 +8,8 @@
 
 #include "scores.h"
 
-/** One table per scored mode. Classic only for now; Lives joins in a later
- *  step (Zen has no score). */
-#define SCORE_MODES 1
+/** One table per scored mode (Zen has no score). */
+#define SCORE_MODES 2   /* 0 Classic, 1 Lives */
 
 /** Read a mode's table. A missing, wrong-sized or corrupt blob gives an empty
  *  table, never an error. */

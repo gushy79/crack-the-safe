@@ -33,6 +33,8 @@ void app_start(void);
  * Back. The game is paused while the menu or anything opened from it is up. */
 void app_menu(void);
 void app_menu_new_game(void);
+/** A new game under the given rules (Classic, Lives, Zen). */
+void app_new_game(game_rules_t rules);
 void app_menu_settings(void);
 /** The Top-5 Scores page. */
 void app_menu_scores(void);
