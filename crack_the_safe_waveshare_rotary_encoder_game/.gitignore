@@ -59,3 +59,4 @@ firmware_backup/
 # Host-side test binary
 test/test_game
 test/test_scores
+test/test_settings
