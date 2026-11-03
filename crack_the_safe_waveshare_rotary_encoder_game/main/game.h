@@ -61,7 +61,20 @@ typedef enum {
     GAME_EV_TIMEOUT  = 1 << 6,  /* the clock ran out (with WRONG) */
     GAME_EV_RESET    = 1 << 7,  /* back to the title */
     GAME_EV_INSTRUCTIONS = 1 << 8,  /* the title gave way to the rules */
+    GAME_EV_RETRY    = 1 << 9,  /* Lives: a life was lost; same code again (with RESUMED) */
 } game_event_t;
+
+/* How a game is played. Chosen with game_set_rules() and applied by the next
+ * game_new(); it survives game_reset(). */
+typedef enum {
+    GAME_RULES_CLASSIC = 0,  /* a loss deals fresh numbers */
+    GAME_RULES_LIVES,        /* GAME_LIVES lives: a loss repeats the same code,
+                              * out of lives (or time) deals fresh numbers */
+    GAME_RULES_ZEN,          /* no clock, no score */
+    GAME_RULES_COUNT
+} game_rules_t;
+
+#define GAME_LIVES 3
 
 typedef struct {
     game_mode_t mode;
@@ -82,6 +95,14 @@ typedef struct {
     uint32_t speed_dps;               /* smoothed turning speed, detents/s */
     bool     paused;                  /* the clock is stopped (a menu is up) */
     uint32_t paused_ms;               /* ... since this moment */
+    game_rules_t rules;               /* Classic, Lives or Zen */
+    uint8_t  lives;                   /* Lives: chances left, this one included */
+    uint8_t  start_dial;              /* the dial value the code was dealt from */
+    /* Two independent streams, so what is dealt never depends on how many
+     * "is the click felt?" rolls the player's turning used up. The same seed
+     * and the same dial positions give the same codes. */
+    uint32_t rng_deal;
+    uint32_t rng_feel;
 } game_t;
 
 /* Turning at or below FEEL_SLOW_DPS the number always clicks; at or above
@@ -110,6 +131,12 @@ unsigned game_tap(game_t *g, uint32_t now_ms);
 
 /** The Start button on the rules: the first game begins. */
 unsigned game_start(game_t *g, uint32_t now_ms);
+
+/** Pick the rules for the next game_new(). Does not disturb a game in play. */
+void game_set_rules(game_t *g, game_rules_t rules);
+
+/** False in Zen: there is no clock to run out. */
+bool game_timed(const game_t *g);
 
 /** "New Game" from the menu: level 1, a fresh code, the dial at 0. */
 unsigned game_new(game_t *g, uint32_t now_ms);
@@ -159,5 +186,6 @@ int game_next_level(const game_t *g);
  */
 uint32_t game_score(int level, uint32_t time_left_ms);
 
-/** The score of the safe just opened (frozen at the opening); 0 otherwise. */
+/** The score of the safe just opened (frozen at the opening); 0 otherwise,
+ *  and always 0 in Zen. */
 uint32_t game_current_score(const game_t *g, uint32_t now_ms);

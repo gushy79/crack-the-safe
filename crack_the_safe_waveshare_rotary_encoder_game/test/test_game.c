@@ -593,6 +593,234 @@ static void test_pause_holds_the_red_timer(void)
     CHECK(game_tick(&g, t + 51000 + 1000) & GAME_EV_RESUMED);
 }
 
+/* ---- rules: Lives, Zen, and the split random streams ------------------ */
+
+/* Overshoot the number: a loss (no clock cost beyond the turns themselves). */
+static unsigned lose(game_t *g)
+{
+    go_to_target(g);
+    return turn(g, game_stage_dir(g));
+}
+
+/* Sit out the red hold. */
+static unsigned hold_red(game_t *g)
+{
+    s_now += GAME_WRONG_HOLD_MS;
+    return game_tick(g, s_now);
+}
+
+static void begin_rules(game_t *g, uint32_t seed, game_rules_t r)
+{
+    game_init(g, seed);
+    game_set_rules(g, r);
+    s_now = T0;
+    game_rotate(g, 1, s_now);
+    game_start(g, s_now);
+}
+
+static void test_classic_is_the_default_and_has_no_lives(void)
+{
+    game_t g;
+    begin(&g, 5);
+    CHECK(g.rules == GAME_RULES_CLASSIC);
+    CHECK(g.lives == 0);
+    CHECK(game_timed(&g));
+}
+
+static void test_lives_start_full(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    CHECK(g.lives == GAME_LIVES);
+}
+
+static void test_lives_loss_keeps_the_same_code_and_costs_a_life(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    uint8_t code[GAME_CODE_LEN];
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        code[i] = g.code[i];
+    }
+    CHECK(lose(&g) & GAME_EV_WRONG);
+    CHECK(g.lives == GAME_LIVES - 1);
+    const unsigned ev = hold_red(&g);
+    CHECK(ev & GAME_EV_RETRY);
+    CHECK(ev & GAME_EV_RESUMED);
+    CHECK(!(ev & GAME_EV_STARTED));
+    CHECK(g.mode == GAME_PLAY);
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        CHECK(g.code[i] == code[i]);
+    }
+    CHECK(g.stage == 0 && g.locked == 0);
+    CHECK(g.level == 1);
+    CHECK(g.attempts == 2);
+}
+
+static void test_lives_retry_is_playable_and_far_enough_from_number_one(void)
+{
+    game_t g;
+    begin_rules(&g, 11, GAME_RULES_LIVES);
+    lose(&g);
+    hold_red(&g);
+    CHECK(game_distance(&g) > 0);      /* not already sitting on number 1 */
+    for (int i = 0; i < GAME_CODE_LEN - 1; i++) {
+        solve_stage(&g);
+    }
+    CHECK(solve_stage(&g) & GAME_EV_UNLOCKED);
+}
+
+static void test_lives_red_hold_costs_no_time(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    lose(&g);
+    const uint32_t frozen = game_time_left_ms(&g, s_now);
+    hold_red(&g);
+    CHECK(game_time_left_ms(&g, s_now) == frozen);
+    s_now += 1000;
+    CHECK(game_time_left_ms(&g, s_now) == frozen - 1000);
+}
+
+static void test_lives_out_of_lives_deals_a_fresh_game(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    for (int n = 0; n < GAME_LIVES - 1; n++) {
+        lose(&g);
+        CHECK(hold_red(&g) & GAME_EV_RETRY);
+    }
+    CHECK(g.lives == 1);
+    lose(&g);
+    CHECK(g.lives == 0);
+    const unsigned ev = hold_red(&g);
+    CHECK(ev & GAME_EV_STARTED);
+    CHECK(!(ev & GAME_EV_RETRY));
+    CHECK(g.mode == GAME_PLAY);
+    CHECK(g.lives == GAME_LIVES);
+    CHECK(g.attempts == 1);
+}
+
+static void test_lives_a_win_keeps_the_lives_left(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    lose(&g);
+    hold_red(&g);
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        solve_stage(&g);
+    }
+    CHECK(g.mode == GAME_UNLOCKED);
+    CHECK(g.lives == GAME_LIVES - 1);
+    s_now += GAME_REPLAY_LOCKOUT_MS;
+    game_tap(&g, s_now);
+    CHECK(g.mode == GAME_PLAY);
+    CHECK(g.level == 2);
+    CHECK(g.lives == GAME_LIVES - 1);
+}
+
+static void test_lives_timeout_ends_the_game_whatever_is_left(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    s_now += game_level_ms(1) + 1;
+    CHECK(game_tick(&g, s_now) & GAME_EV_TIMEOUT);
+    CHECK(g.lives == 0);
+    const unsigned ev = hold_red(&g);
+    CHECK(ev & GAME_EV_STARTED);       /* fresh game, not a retry */
+    CHECK(!(ev & GAME_EV_RETRY));
+    CHECK(g.lives == GAME_LIVES);
+}
+
+static void test_lives_new_game_restores_full_lives_and_level_one(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_LIVES);
+    lose(&g);
+    hold_red(&g);
+    game_new(&g, s_now);
+    CHECK(g.rules == GAME_RULES_LIVES);
+    CHECK(g.lives == GAME_LIVES);
+    CHECK(g.level == 1);
+    CHECK(g.mode == GAME_PLAY);
+}
+
+static void test_classic_loss_still_deals_fresh_numbers(void)
+{
+    game_t g;
+    begin(&g, 5);
+    lose(&g);
+    const unsigned ev = hold_red(&g);
+    CHECK(ev & GAME_EV_STARTED);
+    CHECK(!(ev & GAME_EV_RETRY));
+    CHECK(g.lives == 0);
+}
+
+static void test_zen_has_no_clock_and_no_score(void)
+{
+    game_t g;
+    begin_rules(&g, 5, GAME_RULES_ZEN);
+    CHECK(!game_timed(&g));
+    s_now += game_level_ms(1) * 3;
+    CHECK(game_tick(&g, s_now) == GAME_EV_NONE);
+    CHECK(g.mode == GAME_PLAY);
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        solve_stage(&g);
+    }
+    CHECK(g.mode == GAME_UNLOCKED);
+    CHECK(game_current_score(&g, s_now) == 0);
+}
+
+static void test_rules_survive_reset_and_bad_values_fall_back(void)
+{
+    game_t g;
+    game_init(&g, 5);
+    game_set_rules(&g, GAME_RULES_ZEN);
+    game_reset(&g, 2000);
+    CHECK(g.rules == GAME_RULES_ZEN);
+    game_set_rules(&g, (game_rules_t)99);
+    CHECK(g.rules == GAME_RULES_CLASSIC);
+}
+
+/* The code must not depend on how many "felt?" rolls the turning used. One
+ * game turns slowly (no rolls); the other crosses the middle speed band, where
+ * every arrival rolls. Both reach the same dial positions, so they must be
+ * dealt the same next code. */
+static void test_codes_do_not_depend_on_the_feel_rolls(void)
+{
+    game_t a, b;
+    begin(&a, 77);
+    begin(&b, 77);
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        CHECK(a.code[i] == b.code[i]);
+    }
+    uint32_t ta = s_now, tb = s_now;
+    for (int stage = 0; stage < GAME_CODE_LEN; stage++) {
+        const int dir = game_stage_dir(&a);
+        for (int n = game_distance(&a); n > 0; n--) {
+            ta += SLOW_MS;
+            game_rotate(&a, dir, ta);
+        }
+        for (int n = game_distance(&b); n > 0; n--) {
+            tb += 80;                  /* ~12 detents/s: inside the roll band */
+            game_rotate(&b, dir, tb);
+        }
+        ta += SLOW_MS;
+        tb += SLOW_MS;
+        game_rotate(&a, -dir, ta);
+        game_rotate(&b, -dir, tb);
+    }
+    CHECK(a.mode == GAME_UNLOCKED && b.mode == GAME_UNLOCKED);
+    ta += GAME_REPLAY_LOCKOUT_MS;
+    tb += GAME_REPLAY_LOCKOUT_MS;
+    game_tap(&a, ta);
+    game_tap(&b, tb);
+    CHECK(a.ticks == b.ticks);
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        CHECK(a.code[i] == b.code[i]);
+    }
+}
+
 int main(void)
 {
     RUN(test_init_is_title);
@@ -634,6 +862,19 @@ int main(void)
     RUN(test_no_score_for_a_loss);
     RUN(test_pause_stops_the_clock);
     RUN(test_pause_holds_the_red_timer);
+    RUN(test_classic_is_the_default_and_has_no_lives);
+    RUN(test_lives_start_full);
+    RUN(test_lives_loss_keeps_the_same_code_and_costs_a_life);
+    RUN(test_lives_retry_is_playable_and_far_enough_from_number_one);
+    RUN(test_lives_red_hold_costs_no_time);
+    RUN(test_lives_out_of_lives_deals_a_fresh_game);
+    RUN(test_lives_a_win_keeps_the_lives_left);
+    RUN(test_lives_timeout_ends_the_game_whatever_is_left);
+    RUN(test_lives_new_game_restores_full_lives_and_level_one);
+    RUN(test_classic_loss_still_deals_fresh_numbers);
+    RUN(test_zen_has_no_clock_and_no_score);
+    RUN(test_rules_survive_reset_and_bad_values_fall_back);
+    RUN(test_codes_do_not_depend_on_the_feel_rolls);
 
     printf("\n%d checks, %d failed\n", s_checks, s_failed);
     return s_failed ? 1 : 0;

@@ -10,15 +10,13 @@
  * least this far apart, so every number takes a real turn to reach. */
 #define MIN_GAP 5
 
-static uint32_t s_rng;
-
-static uint32_t rnd(void)
+static uint32_t rnd(uint32_t *s)
 {
     /* xorshift32 -- the seed comes from the hardware RNG in main.c. */
-    s_rng ^= s_rng << 13;
-    s_rng ^= s_rng >> 17;
-    s_rng ^= s_rng << 5;
-    return s_rng;
+    *s ^= *s << 13;
+    *s ^= *s >> 17;
+    *s ^= *s << 5;
+    return *s;
 }
 
 static int wrap(int v)
@@ -61,14 +59,15 @@ static void set_mode(game_t *g, game_mode_t m, uint32_t now_ms)
     g->mode_since_ms = now_ms;
 }
 
-/* Deal a new code and go back to number 1. Keeps the attempt count. */
+/* Deal a new code and go back to number 1. */
 static void deal(game_t *g, uint32_t now_ms)
 {
     int prev = game_dial_value(g);
+    g->start_dial = (uint8_t)prev;
     for (int k = 0; k < GAME_CODE_LEN; k++) {
         int v;
         do {
-            v = (int)(rnd() % GAME_POSITIONS);
+            v = (int)(rnd(&g->rng_deal) % GAME_POSITIONS);
         } while (dist(v, prev) < MIN_GAP);
         g->code[k] = (uint8_t)v;
         prev = v;
@@ -118,6 +117,12 @@ uint32_t game_time_left_ms(const game_t *g, uint32_t now_ms)
 static unsigned start_round(game_t *g, uint32_t now_ms)
 {
     g->level = (uint8_t)game_next_level(g);
+    /* A fresh game starts with full lives; a win carries what is left. */
+    if (g->rules != GAME_RULES_LIVES) {
+        g->lives = 0;
+    } else if (g->mode != GAME_UNLOCKED) {
+        g->lives = GAME_LIVES;
+    }
     g->timed_out = false;
     g->attempts = 1;
     g->started_ms = now_ms;
@@ -130,7 +135,11 @@ static unsigned start_round(game_t *g, uint32_t now_ms)
 void game_init(game_t *g, uint32_t seed)
 {
     *g = (game_t){ 0 };
-    s_rng = seed ? seed : 0x9E3779B9u;
+    g->rng_deal = seed ? seed : 0x9E3779B9u;
+    g->rng_feel = (g->rng_deal * 2654435761u) ^ 0x85EBCA6Bu;
+    if (g->rng_feel == 0) {
+        g->rng_feel = 0x27D4EB2Fu;
+    }
     g->mode = GAME_TITLE;
 }
 
@@ -141,6 +150,9 @@ static unsigned fail(game_t *g, uint32_t now_ms)
     g->on_target = false;
     g->hit_felt = false;
     g->finished_ms = now_ms;       /* freezes the clock display in the red */
+    if (g->rules == GAME_RULES_LIVES && g->lives > 0) {
+        g->lives--;
+    }
     set_mode(g, GAME_WRONG, now_ms);
     return GAME_EV_WRONG;
 }
@@ -157,7 +169,7 @@ static unsigned open_safe(game_t *g, uint32_t now_ms)
 }
 
 /* Is the click on the number felt at the current turning speed? */
-static bool felt(const game_t *g)
+static bool felt(game_t *g)
 {
     if (g->speed_dps <= GAME_FEEL_SLOW_DPS) {
         return true;
@@ -167,7 +179,7 @@ static bool felt(const game_t *g)
     }
     const uint32_t span = GAME_FEEL_FAST_DPS - GAME_FEEL_SLOW_DPS;
     const uint32_t keep = GAME_FEEL_FAST_DPS - g->speed_dps;   /* span..0 */
-    return rnd() % span < keep;
+    return rnd(&g->rng_feel) % span < keep;
 }
 
 /* Smoothed detents per second. Detents arrive in batches (the board delivers
@@ -297,6 +309,16 @@ unsigned game_start(game_t *g, uint32_t now_ms)
     return GAME_EV_NONE;
 }
 
+void game_set_rules(game_t *g, game_rules_t rules)
+{
+    g->rules = rules < GAME_RULES_COUNT ? rules : GAME_RULES_CLASSIC;
+}
+
+bool game_timed(const game_t *g)
+{
+    return g->rules != GAME_RULES_ZEN;
+}
+
 unsigned game_new(game_t *g, uint32_t now_ms)
 {
     return game_reset(g, now_ms) | start_round(g, now_ms);
@@ -330,9 +352,12 @@ void game_resume(game_t *g, uint32_t now_ms)
 
 unsigned game_reset(game_t *g, uint32_t now_ms)
 {
-    const uint32_t keep_rng = s_rng;
-    game_init(g, keep_rng);           /* title, level 0 (so 1 next), ticks 0 */
-    s_rng = keep_rng;
+    const uint32_t keep_deal = g->rng_deal, keep_feel = g->rng_feel;
+    const game_rules_t keep_rules = g->rules;
+    game_init(g, keep_deal);          /* title, level 0 (so 1 next), ticks 0 */
+    g->rng_deal = keep_deal;
+    g->rng_feel = keep_feel;
+    g->rules = keep_rules;
     set_mode(g, GAME_TITLE, now_ms);
     return GAME_EV_RESET;
 }
@@ -343,10 +368,30 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
         now_ms - g->last_turn_ms >= GAME_OPEN_DWELL_MS) {
         return open_safe(g, now_ms);
     }
-    if (g->mode == GAME_PLAY && game_time_left_ms(g, now_ms) == 0) {
+    if (g->mode == GAME_PLAY && game_timed(g) && game_time_left_ms(g, now_ms) == 0) {
         const unsigned ev = fail(g, now_ms);
         g->timed_out = true;
+        g->lives = 0;              /* a spent clock cannot be retried */
         return ev | GAME_EV_TIMEOUT;
+    }
+    if (g->mode == GAME_WRONG && g->rules == GAME_RULES_LIVES && g->lives > 0 &&
+        now_ms - g->mode_since_ms >= GAME_WRONG_HOLD_MS) {
+        /* A life lost, not the game: the same code again from number 1, the
+         * dial back where the code was dealt from. The clock kept its value
+         * through the red hold, so the hold costs no time. */
+        g->ticks = -(int32_t)g->start_dial;
+        g->speed_dps = 0;
+        g->stage = 0;
+        g->locked = 0;
+        g->travel = 0;
+        g->on_target = false;
+        g->hit_felt = false;
+        g->timed_out = false;
+        g->attempts++;
+        g->started_ms += now_ms - g->finished_ms;
+        g->finished_ms = 0;
+        set_mode(g, GAME_PLAY, now_ms);
+        return GAME_EV_RESUMED | GAME_EV_RETRY;
     }
     if (g->mode == GAME_WRONG && now_ms - g->mode_since_ms >= GAME_WRONG_HOLD_MS) {
         /* A new game: dial back to 0, fresh numbers dealt from there, the
@@ -371,7 +416,7 @@ uint32_t game_score(int level, uint32_t time_left_ms)
 
 uint32_t game_current_score(const game_t *g, uint32_t now_ms)
 {
-    if (g->mode != GAME_UNLOCKED) {
+    if (g->mode != GAME_UNLOCKED || g->rules == GAME_RULES_ZEN) {
         return 0;
     }
     return game_score(g->level, game_time_left_ms(g, now_ms));
