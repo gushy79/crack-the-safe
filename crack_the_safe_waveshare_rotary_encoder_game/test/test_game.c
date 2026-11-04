@@ -682,7 +682,7 @@ static void test_lives_red_hold_costs_no_time(void)
     CHECK(game_time_left_ms(&g, s_now) == frozen - 1000);
 }
 
-static void test_lives_out_of_lives_deals_a_fresh_game(void)
+static void test_lives_out_of_lives_ends_the_game(void)
 {
     game_t g;
     begin_rules(&g, 5, GAME_RULES_LIVES);
@@ -694,11 +694,10 @@ static void test_lives_out_of_lives_deals_a_fresh_game(void)
     lose(&g);
     CHECK(g.lives == 0);
     const unsigned ev = hold_red(&g);
-    CHECK(ev & GAME_EV_STARTED);
-    CHECK(!(ev & GAME_EV_RETRY));
-    CHECK(g.mode == GAME_PLAY);
-    CHECK(g.lives == GAME_LIVES);
-    CHECK(g.attempts == 1);
+    CHECK(ev & GAME_EV_OVER);          /* it ends: nothing refills the lives */
+    CHECK(!(ev & (GAME_EV_STARTED | GAME_EV_RETRY)));
+    CHECK(g.mode == GAME_TITLE);
+    CHECK(g.rules == GAME_RULES_LIVES);        /* the chosen rules stay */
 }
 
 static void test_lives_a_win_keeps_the_lives_left(void)
@@ -727,9 +726,9 @@ static void test_lives_timeout_ends_the_game_whatever_is_left(void)
     CHECK(game_tick(&g, s_now) & GAME_EV_TIMEOUT);
     CHECK(g.lives == 0);
     const unsigned ev = hold_red(&g);
-    CHECK(ev & GAME_EV_STARTED);       /* fresh game, not a retry */
+    CHECK(ev & GAME_EV_OVER);          /* the game ends, not a retry */
     CHECK(!(ev & GAME_EV_RETRY));
-    CHECK(g.lives == GAME_LIVES);
+    CHECK(g.mode == GAME_TITLE);
 }
 
 static void test_lives_new_game_restores_full_lives_and_level_one(void)
@@ -743,6 +742,54 @@ static void test_lives_new_game_restores_full_lives_and_level_one(void)
     CHECK(g.lives == GAME_LIVES);
     CHECK(g.level == 1);
     CHECK(g.mode == GAME_PLAY);
+}
+
+static void open_next(game_t *g)
+{
+    for (int i = 0; i < GAME_CODE_LEN; i++) {
+        solve_stage(g);
+    }
+    CHECK(g->mode == GAME_UNLOCKED);
+}
+
+static void test_run_totals_add_up_across_safes_and_loops(void)
+{
+    game_t g;
+    begin_rules(&g, 11, GAME_RULES_LIVES);
+    uint32_t sum = 0;
+    for (int n = 1; n <= GAME_LEVELS + 2; n++) {       /* a whole loop and two more */
+        open_next(&g);
+        sum += game_current_score(&g, s_now);
+        CHECK(g.run_levels == n);
+        CHECK(g.run_score == sum);
+        s_now += GAME_REPLAY_LOCKOUT_MS;
+        game_tap(&g, s_now);
+    }
+    CHECK(sum > 0);
+    CHECK(g.level == 3);                               /* round the loop and on */
+    CHECK(g.lives == GAME_LIVES);
+}
+
+static void test_run_totals_survive_lost_lives_and_end_with_the_game(void)
+{
+    game_t g;
+    begin_rules(&g, 11, GAME_RULES_LIVES);
+    open_next(&g);
+    s_now += GAME_REPLAY_LOCKOUT_MS;
+    game_tap(&g, s_now);
+    const uint32_t kept = g.run_score;
+    CHECK(kept > 0 && g.run_levels == 1);
+    lose(&g);
+    hold_red(&g);                                      /* a life lost: the run goes on */
+    CHECK(g.run_score == kept && g.run_levels == 1);
+    lose(&g);
+    CHECK(g.run_score == kept && g.run_levels == 1);   /* still there for the caller */
+    CHECK(hold_red(&g) & GAME_EV_RETRY);
+    lose(&g);
+    CHECK(g.lives == 0);
+    CHECK(g.run_score == kept && g.run_levels == 1);
+    CHECK(hold_red(&g) & GAME_EV_OVER);
+    CHECK(g.mode == GAME_TITLE && g.run_score == 0 && g.run_levels == 0);
 }
 
 static void test_classic_loss_still_deals_fresh_numbers(void)
@@ -912,7 +959,9 @@ int main(void)
     RUN(test_lives_loss_keeps_the_same_code_and_costs_a_life);
     RUN(test_lives_retry_is_playable_and_far_enough_from_number_one);
     RUN(test_lives_red_hold_costs_no_time);
-    RUN(test_lives_out_of_lives_deals_a_fresh_game);
+    RUN(test_lives_out_of_lives_ends_the_game);
+    RUN(test_run_totals_add_up_across_safes_and_loops);
+    RUN(test_run_totals_survive_lost_lives_and_end_with_the_game);
     RUN(test_lives_a_win_keeps_the_lives_left);
     RUN(test_lives_timeout_ends_the_game_whatever_is_left);
     RUN(test_lives_new_game_restores_full_lives_and_level_one);

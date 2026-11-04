@@ -116,6 +116,12 @@ uint32_t game_time_left_ms(const game_t *g, uint32_t now_ms)
 
 static unsigned start_round(game_t *g, uint32_t now_ms)
 {
+    if (g->mode != GAME_UNLOCKED) {
+        /* Not carrying on from a win: a new run (a win continues it, round
+         * the levels as many times as the player lasts). */
+        g->run_score = 0;
+        g->run_levels = 0;
+    }
     g->level = (uint8_t)game_next_level(g);
     /* A fresh game starts with full lives; a win carries what is left. */
     if (g->rules != GAME_RULES_LIVES) {
@@ -166,6 +172,8 @@ static unsigned open_safe(game_t *g, uint32_t now_ms)
     g->stage = GAME_CODE_LEN;
     g->finished_ms = now_ms;
     set_mode(g, GAME_UNLOCKED, now_ms);
+    g->run_score += game_current_score(g, now_ms);
+    g->run_levels++;
     return GAME_EV_UNLOCKED;
 }
 
@@ -399,8 +407,14 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
         set_mode(g, GAME_PLAY, now_ms);
         return GAME_EV_RESUMED | GAME_EV_RETRY;
     }
+    if (g->mode == GAME_WRONG && g->rules == GAME_RULES_LIVES &&
+        now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
+        /* The run is over (the last life, or the clock): back
+         * to the title. The caller has the run's totals from the loss. */
+        return game_reset(g, now_ms) | GAME_EV_OVER;
+    }
     if (g->mode == GAME_WRONG && now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
-        /* A new game: dial back to 0, fresh numbers dealt from there, the
+        /* Classic and Zen: a new game: dial back to 0, fresh numbers dealt from there, the
          * attempt count and the clock restarted. */
         g->ticks = 0;
         g->speed_dps = 0;

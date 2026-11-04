@@ -62,11 +62,18 @@ static int feel_range(void)
 static bool s_hum_played;
 static bool s_prize_played;
 
-/* High scores: one Top-5 table per scored mode (Classic, Lives; Zen is not
- * scored), kept in NVS. The last opened safe's score and rank are what the vault screen shows. */
+/* High scores: one Top-5 table per scored mode, kept in NVS. Classic's
+ * entries are single safes; Lives' are whole runs (every safe opened until
+ * the lives or the clock ran out). Zen is not scored. */
 static score_table_t s_scores[SCORE_MODES];
-static uint32_t s_last_score;
-static int s_last_rank = -1;       /* 0 = new best, -1 = not in the table */
+static uint32_t s_last_score;      /* the safe just opened (Classic's table) */
+/* The latest entry made: its table and place (-1 = it did not make the
+ * table), shown highlighted on the Scores page. A run that did not place is
+ * kept here to show on the game-over page. */
+static int s_new_mode = -1;
+static int s_new_rank = -1;
+static score_entry_t s_new_entry;
+static bool s_game_over;           /* the Scores page is showing a game over */
 /* Which table the Scores page shows: 0 Classic, 1 Lives. It starts on the
  * current mode's and the knob flips it. */
 static int s_scores_view;
@@ -79,28 +86,49 @@ static int score_mode(void)
     return g_game.rules == GAME_RULES_LIVES ? 1 : 0;
 }
 
-/* The safe just opened: score it and, if it makes the table, save it. */
+static void note_entry(int mode, score_entry_t e)
+{
+    s_new_mode = mode;
+    s_new_entry = e;
+    s_new_rank = scores_insert(&s_scores[mode], e);
+    if (s_new_rank >= 0) {
+        /* Saved a little later (flush_scores): the flash commit stalls the
+         * screen, and this may be the moment the door animation starts. */
+        s_save_mode = mode;
+    }
+}
+
+/* Classic: the safe just opened is scored on its own. (Lives adds it to the
+ * run, recorded when the run ends.) */
 static void record_score(void)
 {
     const uint32_t now = app_now_ms();
     s_last_score = game_current_score(&g_game, now);
-    if (s_last_score == 0) {       /* Zen, or no time left: nothing to record */
-        s_last_rank = -1;
+    if (s_last_score == 0 || g_game.rules != GAME_RULES_CLASSIC) {
+        return;                    /* Zen, no time left, or a run in progress */
+    }
+    note_entry(0, (score_entry_t){
+        .score  = s_last_score,
+        .levels = g_game.level,
+        .left_s = (uint16_t)(game_time_left_ms(&g_game, now) / 1000u),
+    });
+    ESP_LOGI(TAG, "score %lu, rank %d", (unsigned long)s_last_score, s_new_rank);
+}
+
+/* Lives: the run is over (or given up): put it in the table. */
+static void record_run(void)
+{
+    if (g_game.rules != GAME_RULES_LIVES || g_game.run_levels == 0) {
         return;
     }
-    const score_entry_t e = {
-        .score  = s_last_score,
-        .level  = g_game.level,
-        .left_s = (uint16_t)(game_time_left_ms(&g_game, now) / 1000u),
-    };
-    const int m = score_mode();
-    s_last_rank = scores_insert(&s_scores[m], e);
-    if (s_last_rank >= 0) {
-        /* Saved a little later (flush_scores): the flash commit stalls the
-         * screen, and this is the moment the door animation starts. */
-        s_save_mode = m;
-    }
-    ESP_LOGI(TAG, "score %lu, rank %d", (unsigned long)s_last_score, s_last_rank);
+    note_entry(1, (score_entry_t){
+        .score  = g_game.run_score,
+        .levels = g_game.run_levels,
+    });
+    ESP_LOGI(TAG, "run %lu over %u safes, rank %d", (unsigned long)g_game.run_score,
+             (unsigned)g_game.run_levels, s_new_rank);
+    g_game.run_score = 0;          /* recorded: not again */
+    g_game.run_levels = 0;
 }
 
 /* Write a waiting table to flash; a failure is logged, and the table stays in
@@ -130,7 +158,26 @@ uint32_t app_last_score(void)
 
 int app_last_rank(void)
 {
-    return s_last_rank;
+    return s_new_mode == 0 ? s_new_rank : -1;
+}
+
+bool app_scores_game_over(void)
+{
+    return s_game_over;
+}
+
+int app_scores_new_row(void)
+{
+    return s_new_mode == s_scores_view ? s_new_rank : -1;
+}
+
+bool app_scores_new_unplaced(score_entry_t *e)
+{
+    if (s_game_over && s_new_mode == 1 && s_new_rank < 0) {
+        *e = s_new_entry;
+        return true;
+    }
+    return false;
 }
 
 uint32_t app_now_ms(void)
@@ -268,6 +315,9 @@ static void handle(unsigned ev)
             sound_siren();   /* for as long as the police lights flash */
         }
         ESP_LOGI(TAG, "wrong -- attempt %u, new code", g_game.attempts);
+        if (g_game.rules == GAME_RULES_LIVES && g_game.lives == 0) {
+            record_run();           /* the last life, or the clock: the run is over */
+        }
     }
     if (ev & GAME_EV_UNLOCKED) {
         static const uint8_t seq[] = { FX_STRONG_CLICK, FX_PAUSE(150), FX_RAMP_UP };
@@ -278,6 +328,14 @@ static void handle(unsigned ev)
         record_score();
         ESP_LOGI(TAG, "unlocked in %u attempt(s), %lus", g_game.attempts,
                  (unsigned long)game_elapsed_s(&g_game, app_now_ms()));
+    }
+    if (ev & GAME_EV_OVER) {
+        /* The red hold of the run's last loss is over: the Scores page shows
+         * how it went, and its button plays again. */
+        ESP_LOGI(TAG, "game over");
+        s_game_over = true;
+        s_scores_view = 1;
+        over_push(OVER_SCORES);
     }
     if (ev) {
         show_screen_for_mode();
@@ -315,7 +373,7 @@ void app_rotate(int detents)
             ui_game_scroll_headphones(detents);
         } else if (over_is(OVER_SETTINGS)) {
             app_volume_step(detents);        /* the knob turns the volume */
-        } else if (over_is(OVER_SCORES)) {
+        } else if (over_is(OVER_SCORES) && !s_game_over) {
             s_scores_view = (s_scores_view + 1) % SCORE_MODES;   /* the other table */
             ui_game_refresh();
         }
@@ -351,6 +409,12 @@ void app_menu(void)
 {
     if (s_depth == 0) {
         knob_board_haptic(FX_DOUBLE_CLICK);
+        /* The finger is still down on a screen that is about to change: its
+         * release must not press whatever button ends up beneath it. */
+        lv_indev_t *const indev = lv_indev_active();
+        if (indev) {
+            lv_indev_wait_release(indev);
+        }
         over_push(OVER_MENU);
         ui_game_refresh();
     }
@@ -359,6 +423,8 @@ void app_menu(void)
 void app_new_game(game_rules_t rules)
 {
     s_depth = 0;                            /* the paused game is dropped */
+    s_game_over = false;
+    record_run();                           /* a run given up still counts */
     sound_stop();                           /* a siren still wailing */
     game_set_rules(&g_game, rules);
     const unsigned ev = game_new(&g_game, app_now_ms());
@@ -388,6 +454,7 @@ void app_menu_settings(void)
 
 void app_menu_scores(void)
 {
+    s_game_over = false;
     s_scores_view = score_mode();
     over_push(OVER_SCORES);
     ui_game_refresh();
@@ -395,6 +462,10 @@ void app_menu_scores(void)
 
 void app_back(void)
 {
+    if (s_game_over && over_is(OVER_SCORES)) {
+        app_new_game(g_game.rules);         /* "Play Again" */
+        return;
+    }
     over_pop();
     ui_game_refresh();
 }
@@ -481,6 +552,7 @@ static void app_timer_cb(lv_timer_t *t)
          * over on a dark screen. Back to the title to wait. */
         ESP_LOGI(TAG, "clock ran out with nobody playing: back to the title");
         knob_board_haptic_pulse(0, 0);
+        record_run();
         ev = game_reset(&g_game, app_now_ms());
     }
     handle(ev);

@@ -55,7 +55,7 @@ bool scores_valid(const score_table_t *t)
         if (t->e[i].score == 0) {
             return false;
         }
-        if (t->e[i].level < 1 || t->e[i].level > GAME_LEVELS ||
+        if (t->e[i].levels < 1 || t->e[i].levels > SCORES_MAX_LEVELS ||
             t->e[i].left_s > SCORES_MAX_LEFT_S) {
             return false;                  /* not something the game could write */
         }
@@ -84,4 +84,17 @@ void scores_fmt_thousands(uint32_t v, char *out, unsigned out_len)
         out[o++] = digits[i];
     }
     out[o] = '\0';
+}
+
+void scores_fmt_run(score_entry_t e, char *out, unsigned out_len)
+{
+    char num[16];
+    scores_fmt_thousands(e.score, num, sizeof(num));
+    const unsigned loops = e.levels / GAME_LEVELS;
+    int n = snprintf(out, out_len, "%s \xC2\xB7 %u %s", num, (unsigned)e.levels,
+                     e.levels == 1 ? "lvl" : "lvls");
+    if (loops > 0 && n > 0 && (unsigned)n < out_len) {
+        snprintf(out + n, out_len - (unsigned)n, " \xC2\xB7 %u %s", loops,
+                 loops == 1 ? "loop" : "loops");
+    }
 }

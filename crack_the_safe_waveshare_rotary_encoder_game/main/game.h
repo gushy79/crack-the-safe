@@ -62,6 +62,8 @@ typedef enum {
     GAME_EV_RESET    = 1 << 7,  /* back to the title */
     GAME_EV_INSTRUCTIONS = 1 << 8,  /* the title gave way to the rules */
     GAME_EV_RETRY    = 1 << 9,  /* Lives: a life was lost; same code again (with RESUMED) */
+    GAME_EV_OVER     = 1 << 10, /* the red hold of a run's last loss ended: game over, back
+                                 * at the title (with RESET) */
 } game_event_t;
 
 /* How a game is played. Chosen with game_set_rules() and applied by the next
@@ -98,6 +100,8 @@ typedef struct {
     game_rules_t rules;               /* Classic, Lives or Zen */
     uint8_t  lives;                   /* Lives: chances left, this one included */
     uint8_t  start_dial;              /* the dial value the code was dealt from */
+    uint32_t run_score;               /* scores of the safes opened since this run began */
+    uint16_t run_levels;              /* ... and how many (8 make a loop of the levels) */
     /* Two independent streams, so what is dealt never depends on how many
      * "is the click felt?" rolls the player's turning used up. The same seed
      * and the same dial positions give the same codes. */

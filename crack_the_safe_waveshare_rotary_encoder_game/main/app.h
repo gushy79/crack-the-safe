@@ -55,6 +55,12 @@ const score_table_t *app_scores(void);
 int app_scores_view(void);
 uint32_t app_last_score(void);
 int app_last_rank(void);
+/** The Scores page is showing a game over (its button plays again). */
+bool app_scores_game_over(void);
+/** The table row (0..4) of the latest entry in the table shown, or -1. */
+int app_scores_new_row(void);
+/** A run that ended without making the Lives table, for the game-over page. */
+bool app_scores_new_unplaced(score_entry_t *e);
 
 /* The Headphones (Bluetooth pairing) screen and its buttons. */
 void app_headphones_open(void);

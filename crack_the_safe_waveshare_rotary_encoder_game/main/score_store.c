@@ -15,7 +15,9 @@ static const char *TAG = "scores";
 
 static void key_for(int mode, char *key, size_t n)
 {
-    snprintf(key, n, "t%d", mode);
+    /* The Lives table holds whole runs now: a new key, so the old per-safe
+     * scores (same size, other meaning) are not read as runs. */
+    snprintf(key, n, mode == 1 ? "r%d" : "t%d", mode);
 }
 
 void score_store_load(int mode, score_table_t *t)

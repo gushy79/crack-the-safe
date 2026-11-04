@@ -188,7 +188,19 @@ static void refresh_play(void)
     const uint32_t t = app_now_ms() - g_game.mode_since_ms;
     const bool red = (t / POLICE_SWAP_MS) % 2 == 0;
     ui_lv_set_hidden(objects.police_red, !(harsh && red));
-    ui_lv_set_hidden(objects.police_blue, !(harsh && !red));
+    /* Zen's miss is only a soft blue wash over the dial that swells and fades
+     * again over the calm hold: a cue for when the sound is off. */
+    const bool calm = wrong && !harsh;
+    ui_lv_set_hidden(objects.police_blue, !((harsh && !red) || calm));
+    if (calm) {
+        const uint32_t hold = GAME_ZEN_HOLD_MS;
+        const uint32_t peak = hold / 4;
+        const uint32_t k = t < peak ? t * 100 / peak
+                                    : t < hold ? (hold - t) * 100 / (hold - peak) : 0;
+        lv_obj_set_style_opa(objects.police_blue, (lv_opa_t)(k * 90 / 100), 0);
+    } else {
+        lv_obj_remove_local_style_prop(objects.police_blue, LV_STYLE_OPA, 0);
+    }
 }
 
 /* ---- Unlocked ---------------------------------------------------------------- */
@@ -272,7 +284,13 @@ static void refresh_unlocked(void)
     char num[16];
     scores_fmt_thousands(app_last_score(), num, sizeof(num));
     const int rank = app_last_rank();
-    if (rank == 0) {
+    if (g_game.rules == GAME_RULES_LIVES) {
+        /* A run: this safe's score and the total so far (the table gets the
+         * run when it ends). */
+        char tot[16];
+        scores_fmt_thousands(g_game.run_score, tot, sizeof(tot));
+        snprintf(buf, sizeof(buf), "+%s \xC2\xB7 Run %s", num, tot);
+    } else if (rank == 0) {
         snprintf(buf, sizeof(buf), "New best! %s", num);
     } else if (rank > 0) {
         snprintf(buf, sizeof(buf), "Score %s \xC2\xB7 #%d", num, rank + 1);
@@ -421,8 +439,12 @@ static void refresh_settings(void)
 
 /* ---- Top Scores ------------------------------------------------------------ */
 
-/* Five rows: "1.  1,920 · L1 · 3:12" (score, level, time that was left), or
- * "--" for an empty place. */
+/* Five rows. Classic: "1.  1,920 \xC2\xB7 L1 \xC2\xB7 3:12" (score, level, time that was
+ * left). Lives: "1.  12,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops" (a whole run). "--" for an
+ * empty place. The latest entry is gold; after a game over the page says so,
+ * and its button plays again. */
+#define NEW_ENTRY_COLOR 0xF2C14E
+
 static void refresh_scores(void)
 {
     lv_obj_t *const rows[SCORES_MAX] = {
@@ -430,19 +452,41 @@ static void refresh_scores(void)
         objects.scores_row_4, objects.scores_row_5,
     };
     const score_table_t *t = app_scores();
+    const bool lives = app_scores_view() == 1;
+    const bool over = app_scores_game_over();
     ui_lv_set_text(objects.scores_title,
-                   app_scores_view() == 1 ? "Lives Scores" : "Classic Scores");
+                   over ? "Game Over" : lives ? "Lives Scores" : "Classic Scores");
+    ui_lv_set_hidden(objects.scores_arrow_l, over);       /* nothing to flip */
+    ui_lv_set_hidden(objects.scores_arrow_r, over);
+    ui_lv_set_text(objects.scores_back_text, over ? "Play Again" : "Back");
+
+    score_entry_t lost;
+    const bool unplaced = app_scores_new_unplaced(&lost);
+    const int fresh = unplaced ? SCORES_MAX - 1 : app_scores_new_row();
     for (int i = 0; i < SCORES_MAX; i++) {
-        char buf[40];
-        if (i < t->count) {
+        char buf[48];
+        if (unplaced && i == fresh) {
+            char run[40];
+            scores_fmt_run(lost, run, sizeof(run));
+            snprintf(buf, sizeof(buf), "You:  %s", run);
+        } else if (i < t->count && lives) {
+            char run[40];
+            scores_fmt_run(t->e[i], run, sizeof(run));
+            snprintf(buf, sizeof(buf), "%d.  %s", i + 1, run);
+        } else if (i < t->count) {
             char num[16];
             scores_fmt_thousands(t->e[i].score, num, sizeof(num));
             snprintf(buf, sizeof(buf), "%d.  %s \xC2\xB7 L%u \xC2\xB7 %u:%02u", i + 1, num,
-                     t->e[i].level, t->e[i].left_s / 60, t->e[i].left_s % 60);
+                     t->e[i].levels, t->e[i].left_s / 60, t->e[i].left_s % 60);
         } else {
             snprintf(buf, sizeof(buf), "%d.  --", i + 1);
         }
         ui_lv_set_text(rows[i], buf);
+        if (i == fresh) {
+            lv_obj_set_style_text_color(rows[i], lv_color_hex(NEW_ENTRY_COLOR), 0);
+        } else {
+            lv_obj_remove_local_style_prop(rows[i], LV_STYLE_TEXT_COLOR, 0);
+        }
     }
 }
 
