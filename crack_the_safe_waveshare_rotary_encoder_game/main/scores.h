@@ -1,7 +1,9 @@
 /*
  * Crack the Safe -- the high-score table, with no hardware in it.
  *
- * A table keeps the best SCORES_MAX scores, best first. Saving it (NVS) and
+ * A table keeps the best SCORES_MAX scores, best first (the Scores page
+ * shows the top SCORES_SHOWN; the rest are what lets a new score say "you
+ * came 104th"). Saving it (NVS) and
  * showing it (the Scores page) are the caller's job; this file only decides
  * who gets in and where, and whether a table read back from flash can be
  * trusted.
@@ -11,7 +13,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SCORES_MAX 5
+/* How many places the Scores page lists, and how many the table remembers. */
+#define SCORES_SHOWN 5
+#define SCORES_MAX 250
 /* The longest clock is 5:00, so no entry can have more seconds left. */
 #define SCORES_MAX_LEFT_S 300
 /* A run longer than this many safes is not something a table will hold. */
@@ -28,7 +32,7 @@ typedef struct {
 } score_entry_t;
 
 typedef struct {
-    uint8_t       count;            /* used entries, 0..SCORES_MAX */
+    uint16_t      count;            /* used entries, 0..SCORES_MAX */
     score_entry_t e[SCORES_MAX];    /* best first */
 } score_table_t;
 

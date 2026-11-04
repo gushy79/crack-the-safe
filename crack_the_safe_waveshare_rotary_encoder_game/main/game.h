@@ -101,6 +101,7 @@ typedef struct {
     uint8_t  lives;                   /* Lives: chances left, this one included */
     uint8_t  start_dial;              /* the dial value the code was dealt from */
     uint32_t run_score;               /* scores of the safes opened since this run began */
+    uint16_t loops;                   /* times the levels have wrapped round since the game began */
     uint16_t run_levels;              /* ... and how many (8 make a loop of the levels) */
     /* Two independent streams, so what is dealt never depends on how many
      * "is the click felt?" rolls the player's turning used up. The same seed

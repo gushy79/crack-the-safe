@@ -72,29 +72,32 @@ static void test_orders_best_first(void)
     CHECK(scores_valid(&t));
 }
 
+/* A full table: 100, 200 ... 100 x SCORES_MAX. */
+static void fill(score_table_t *t)
+{
+    scores_clear(t);
+    for (uint32_t k = 1; k <= SCORES_MAX; k++) {
+        CHECK(scores_insert(t, E(k * 100, 1)) >= 0);
+    }
+    CHECK(t->count == SCORES_MAX);
+}
+
 static void test_full_table_drops_the_worst(void)
 {
     score_table_t t;
-    scores_clear(&t);
-    for (uint32_t s = 100; s <= 500; s += 100) {
-        CHECK(scores_insert(&t, E(s, 1)) >= 0);
-    }
-    CHECK(t.count == SCORES_MAX);
+    fill(&t);
     CHECK(t.e[SCORES_MAX - 1].score == 100);
-    CHECK(scores_insert(&t, E(350, 2)) == 2);       /* pushes 100 out */
+    CHECK(scores_insert(&t, E(350, 2)) == SCORES_MAX - 3);    /* above 300, 200, 100 */
     CHECK(t.count == SCORES_MAX);
-    CHECK(t.e[0].score == 500 && t.e[1].score == 400 && t.e[2].score == 350 &&
-          t.e[3].score == 300 && t.e[4].score == 200);
+    CHECK(t.e[SCORES_MAX - 1].score == 200);                  /* 100 pushed out */
+    CHECK(t.e[SCORES_MAX - 2].score == 300 && t.e[SCORES_MAX - 3].score == 350);
     CHECK(scores_valid(&t));
 }
 
 static void test_too_low_for_a_full_table_is_rejected(void)
 {
     score_table_t t;
-    scores_clear(&t);
-    for (uint32_t s = 100; s <= 500; s += 100) {
-        scores_insert(&t, E(s, 1));
-    }
+    fill(&t);
     const score_table_t before = t;
     CHECK(!scores_qualifies(&t, 100));                 /* ties the worst: out */
     CHECK(!scores_qualifies(&t, 50));
@@ -102,6 +105,18 @@ static void test_too_low_for_a_full_table_is_rejected(void)
     CHECK(scores_insert(&t, E(50, 3)) == -1);
     CHECK(memcmp(&t, &before, sizeof t) == 0);         /* untouched */
     CHECK(scores_qualifies(&t, 101));
+}
+
+static void test_a_low_score_gets_its_true_place_past_the_visible_five(void)
+{
+    score_table_t t;
+    fill(&t);
+    /* 104th best: 103 scores are higher (100 x SCORES_MAX down to ...). */
+    const uint32_t s = (uint32_t)(SCORES_MAX - 103) * 100 + 50;
+    CHECK(scores_insert(&t, E(s, 2)) == 103);          /* rank 103 = the 104th place */
+    CHECK(t.e[103].score == s && t.e[102].score > s && t.e[104].score < s);
+    CHECK(103 >= SCORES_SHOWN);
+    CHECK(scores_valid(&t));
 }
 
 static void test_equal_score_ranks_below_the_earlier_one(void)
@@ -118,13 +133,11 @@ static void test_equal_score_ranks_below_the_earlier_one(void)
 static void test_new_best_into_a_full_table(void)
 {
     score_table_t t;
-    scores_clear(&t);
-    for (uint32_t s = 100; s <= 500; s += 100) {
-        scores_insert(&t, E(s, 1));
-    }
-    CHECK(scores_insert(&t, E(9999, 8)) == 0);
+    fill(&t);
+    CHECK(scores_insert(&t, E(999999, 8)) == 0);
     CHECK(t.count == SCORES_MAX);
-    CHECK(t.e[0].score == 9999 && t.e[4].score == 200);
+    CHECK(t.e[0].score == 999999 && t.e[1].score == 100u * SCORES_MAX);
+    CHECK(t.e[SCORES_MAX - 1].score == 200);
     CHECK(scores_valid(&t));
 }
 
@@ -235,6 +248,7 @@ int main(void)
     RUN(test_orders_best_first);
     RUN(test_full_table_drops_the_worst);
     RUN(test_too_low_for_a_full_table_is_rejected);
+    RUN(test_a_low_score_gets_its_true_place_past_the_visible_five);
     RUN(test_equal_score_ranks_below_the_earlier_one);
     RUN(test_new_best_into_a_full_table);
     RUN(test_table_never_breaks_under_many_inserts);

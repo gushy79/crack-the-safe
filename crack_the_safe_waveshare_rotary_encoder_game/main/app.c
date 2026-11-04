@@ -109,7 +109,7 @@ static void record_score(void)
     }
     note_entry(0, (score_entry_t){
         .score  = s_last_score,
-        .levels = g_game.level,
+        .levels = (uint16_t)(g_game.loops * GAME_LEVELS + g_game.level),   /* the safe's number in the game */
         .left_s = (uint16_t)(game_time_left_ms(&g_game, now) / 1000u),
     });
     ESP_LOGI(TAG, "score %lu, rank %d", (unsigned long)s_last_score, s_new_rank);
@@ -166,18 +166,14 @@ bool app_scores_game_over(void)
     return s_game_over;
 }
 
-int app_scores_new_row(void)
+bool app_scores_latest(score_entry_t *e, int *rank)
 {
-    return s_new_mode == s_scores_view ? s_new_rank : -1;
-}
-
-bool app_scores_new_unplaced(score_entry_t *e)
-{
-    if (s_game_over && s_new_mode == 1 && s_new_rank < 0) {
-        *e = s_new_entry;
-        return true;
+    if (s_new_mode != s_scores_view) {
+        return false;
     }
-    return false;
+    *e = s_new_entry;
+    *rank = s_new_rank;
+    return true;
 }
 
 uint32_t app_now_ms(void)

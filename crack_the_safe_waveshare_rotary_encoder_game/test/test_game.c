@@ -767,6 +767,7 @@ static void test_run_totals_add_up_across_safes_and_loops(void)
     }
     CHECK(sum > 0);
     CHECK(g.level == 3);                               /* round the loop and on */
+    CHECK(g.loops == 1);                               /* one trip round the levels */
     CHECK(g.lives == GAME_LIVES);
 }
 

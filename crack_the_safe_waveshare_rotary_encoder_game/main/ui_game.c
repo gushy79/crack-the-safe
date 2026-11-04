@@ -439,15 +439,48 @@ static void refresh_settings(void)
 
 /* ---- Top Scores ------------------------------------------------------------ */
 
-/* Five rows. Classic: "1.  1,920 \xC2\xB7 L1 \xC2\xB7 3:12" (score, level, time that was
- * left). Lives: "1.  12,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops" (a whole run). "--" for an
- * empty place. The latest entry is gold; after a game over the page says so,
- * and its button plays again. */
+/* Five rows, and a sixth when the latest entry is further down than that
+ * (with its true place). Classic: "1.  1,920 \xC2\xB7 L3 \xC2\xB7 loop 2 \xC2\xB7 3:12 left"
+ * (score, level, which time round the 8 levels, time that was left). Lives:
+ * "1.  12,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops" (a whole run). "--" for an empty
+ * place. The latest entry is gold; after a game over the page says so, and
+ * its button plays again. */
 #define NEW_ENTRY_COLOR 0xF2C14E
+
+static void fmt_entry(char *out, unsigned n, const char *place, score_entry_t e, bool lives)
+{
+    char body[48];
+    if (lives) {
+        scores_fmt_run(e, body, sizeof(body));
+    } else {
+        char num[16];
+        scores_fmt_thousands(e.score, num, sizeof(num));
+        const unsigned lv = (e.levels - 1u) % GAME_LEVELS + 1u;
+        const unsigned loop = (e.levels - 1u) / GAME_LEVELS + 1u;
+        int k = snprintf(body, sizeof(body), "%s \xC2\xB7 L%u", num, lv);
+        if (loop > 1 && k > 0 && (unsigned)k < sizeof(body)) {
+            k += snprintf(body + k, sizeof(body) - (unsigned)k, " \xC2\xB7 loop %u", loop);
+        }
+        if (k > 0 && (unsigned)k < sizeof(body)) {
+            snprintf(body + k, sizeof(body) - (unsigned)k, " \xC2\xB7 %u:%02u left",
+                     e.left_s / 60, e.left_s % 60);
+        }
+    }
+    snprintf(out, n, "%s  %s", place, body);
+}
+
+static void set_gold(lv_obj_t *row, bool gold)
+{
+    if (gold) {
+        lv_obj_set_style_text_color(row, lv_color_hex(NEW_ENTRY_COLOR), 0);
+    } else {
+        lv_obj_remove_local_style_prop(row, LV_STYLE_TEXT_COLOR, 0);
+    }
+}
 
 static void refresh_scores(void)
 {
-    lv_obj_t *const rows[SCORES_MAX] = {
+    lv_obj_t *const rows[SCORES_SHOWN] = {
         objects.scores_row_1, objects.scores_row_2, objects.scores_row_3,
         objects.scores_row_4, objects.scores_row_5,
     };
@@ -460,33 +493,34 @@ static void refresh_scores(void)
     ui_lv_set_hidden(objects.scores_arrow_r, over);
     ui_lv_set_text(objects.scores_back_text, over ? "Play Again" : "Back");
 
-    score_entry_t lost;
-    const bool unplaced = app_scores_new_unplaced(&lost);
-    const int fresh = unplaced ? SCORES_MAX - 1 : app_scores_new_row();
-    for (int i = 0; i < SCORES_MAX; i++) {
-        char buf[48];
-        if (unplaced && i == fresh) {
-            char run[40];
-            scores_fmt_run(lost, run, sizeof(run));
-            snprintf(buf, sizeof(buf), "You:  %s", run);
-        } else if (i < t->count && lives) {
-            char run[40];
-            scores_fmt_run(t->e[i], run, sizeof(run));
-            snprintf(buf, sizeof(buf), "%d.  %s", i + 1, run);
-        } else if (i < t->count) {
-            char num[16];
-            scores_fmt_thousands(t->e[i].score, num, sizeof(num));
-            snprintf(buf, sizeof(buf), "%d.  %s \xC2\xB7 L%u \xC2\xB7 %u:%02u", i + 1, num,
-                     t->e[i].levels, t->e[i].left_s / 60, t->e[i].left_s % 60);
+    score_entry_t latest;
+    int rank = -1;
+    const bool have = app_scores_latest(&latest, &rank);
+    for (int i = 0; i < SCORES_SHOWN; i++) {
+        char buf[64], place[8];
+        snprintf(place, sizeof(place), "%d.", i + 1);
+        if (i < t->count) {
+            fmt_entry(buf, sizeof(buf), place, t->e[i], lives);
         } else {
-            snprintf(buf, sizeof(buf), "%d.  --", i + 1);
+            snprintf(buf, sizeof(buf), "%s  --", place);
         }
         ui_lv_set_text(rows[i], buf);
-        if (i == fresh) {
-            lv_obj_set_style_text_color(rows[i], lv_color_hex(NEW_ENTRY_COLOR), 0);
+        set_gold(rows[i], have && rank == i);
+    }
+
+    /* Below the top five: the latest entry on its own line, with its place. */
+    const bool extra = have && (rank < 0 || rank >= SCORES_SHOWN);
+    ui_lv_set_hidden(objects.scores_row_6, !extra);
+    if (extra) {
+        char buf[64], place[12];
+        if (rank < 0) {
+            snprintf(place, sizeof(place), ">%d.", SCORES_MAX);
         } else {
-            lv_obj_remove_local_style_prop(rows[i], LV_STYLE_TEXT_COLOR, 0);
+            snprintf(place, sizeof(place), "%d.", rank + 1);
         }
+        fmt_entry(buf, sizeof(buf), place, latest, lives);
+        ui_lv_set_text(objects.scores_row_6, buf);
+        set_gold(objects.scores_row_6, true);
     }
 }
 

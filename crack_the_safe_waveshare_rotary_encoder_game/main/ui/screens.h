@@ -182,6 +182,7 @@ typedef struct _objects_t {
     lv_obj_t *scores_row_3;
     lv_obj_t *scores_row_4;
     lv_obj_t *scores_row_5;
+    lv_obj_t *scores_row_6;
     lv_obj_t *scores_back;
     lv_obj_t *scores_back_text;
     lv_obj_t *modes_title;

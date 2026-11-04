@@ -130,6 +130,9 @@ static unsigned start_round(game_t *g, uint32_t now_ms)
         /* A fresh game, or the levels wrapping round to a new cycle. */
         g->lives = GAME_LIVES;
     }
+    if (g->mode == GAME_UNLOCKED && g->level == 1) {
+        g->loops++;                /* a win on the last level: round again */
+    }
     g->timed_out = false;
     g->attempts = 1;
     g->started_ms = now_ms;
