@@ -472,7 +472,7 @@ static void refresh_scores(void)
     int rank = -1;
     const bool have = app_scores_latest(&latest, &rank);
     for (int i = 0; i < SCORES_SHOWN; i++) {
-        char buf[64], place[8];
+        char buf[80], place[8];
         snprintf(place, sizeof(place), "%d.", i + 1);
         if (i < t->count) {
             fmt_entry(buf, sizeof(buf), place, t->e[i], lives);
@@ -487,7 +487,7 @@ static void refresh_scores(void)
     const bool extra = have && (rank < 0 || rank >= SCORES_SHOWN);
     ui_lv_set_hidden(objects.scores_row_6, !extra);
     if (extra) {
-        char buf[64], place[12];
+        char buf[80], place[12];
         if (rank < 0) {
             snprintf(place, sizeof(place), ">%d.", SCORES_MAX);
         } else {
