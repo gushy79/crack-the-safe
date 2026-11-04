@@ -86,7 +86,7 @@ void scores_fmt_thousands(uint32_t v, char *out, unsigned out_len)
     out[o] = '\0';
 }
 
-void scores_fmt_run(score_entry_t e, char *out, unsigned out_len)
+void scores_fmt_run(score_entry_t e, bool show_fails, char *out, unsigned out_len)
 {
     char num[16];
     scores_fmt_thousands(e.score, num, sizeof(num));
@@ -107,7 +107,7 @@ void scores_fmt_run(score_entry_t e, char *out, unsigned out_len)
         }
         n += (unsigned)k;
     }
-    if (e.fails > 0) {
+    if (show_fails && e.fails > 0) {
         snprintf(out + n, out_len - n, " \xC2\xB7 %u %s", (unsigned)e.fails,
                  e.fails == 1 ? "fail" : "fails");
     }

@@ -441,12 +441,12 @@ void create_screen_page_settings() {
                     // settings_hp_text
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.settings_hp_text = obj;
-                    lv_obj_set_pos(obj, 40, 13);
-                    lv_obj_set_size(obj, 93, LV_SIZE_CONTENT);
+                    lv_obj_set_pos(obj, 40, 4);
+                    lv_obj_set_size(obj, 96, LV_SIZE_CONTENT);
                     lv_label_set_long_mode(obj, LV_LABEL_LONG_DOT);
                     add_style_button_text(obj);
                     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN | LV_STATE_DEFAULT);
-                    lv_label_set_text(obj, "Headphones");
+                    lv_label_set_text(obj, "Bluetooth\nheadphones");
                 }
                 {
                     // settings_hp_value

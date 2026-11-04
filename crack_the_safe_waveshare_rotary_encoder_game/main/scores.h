@@ -51,8 +51,9 @@ bool scores_valid(const score_table_t *t);
 
 /** A run for a table row or the game-over line:
  *  "192,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops \xC2\xB7 3 fails" (loops once a whole loop
- *  of the levels was completed, fails when there were any). */
-void scores_fmt_run(score_entry_t e, char *out, unsigned out_len);
+ *  of the levels was completed, fails when there were any and `show_fails`:
+ *  Lives leaves them out, a lost life is already in its score). */
+void scores_fmt_run(score_entry_t e, bool show_fails, char *out, unsigned out_len);
 
 /** Write a number with thousands separators ("1,920") into out, always
  *  NUL-terminated and truncated to fit. */

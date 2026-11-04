@@ -215,20 +215,22 @@ static score_entry_t R(uint32_t score, uint16_t levels, uint16_t fails)
 static void test_run_text(void)
 {
     char b[64];
-    scores_fmt_run(R(31359, 3, 0), b, sizeof b);
+    scores_fmt_run(R(31359, 3, 0), true, b, sizeof b);
     CHECK(strcmp(b, "31,359 \xC2\xB7 3 lvls") == 0);
-    scores_fmt_run(R(10200, 1, 0), b, sizeof b);
+    scores_fmt_run(R(10200, 1, 0), true, b, sizeof b);
     CHECK(strcmp(b, "10,200 \xC2\xB7 1 lvl") == 0);
-    scores_fmt_run(R(79000, 7, 1), b, sizeof b);             /* not a whole loop yet */
+    scores_fmt_run(R(79000, 7, 1), true, b, sizeof b);             /* not a whole loop yet */
     CHECK(strstr(b, "loop") == NULL);
     CHECK(strcmp(b, "79,000 \xC2\xB7 7 lvls \xC2\xB7 1 fail") == 0);
-    scores_fmt_run(R(81234, GAME_LEVELS, 0), b, sizeof b);
+    scores_fmt_run(R(81234, GAME_LEVELS, 0), true, b, sizeof b);
     CHECK(strcmp(b, "81,234 \xC2\xB7 8 lvls \xC2\xB7 1 loop") == 0);
-    scores_fmt_run(R(195000, 2 * GAME_LEVELS + 3, 3), b, sizeof b);
+    scores_fmt_run(R(195000, 2 * GAME_LEVELS + 3, 3), true, b, sizeof b);
     CHECK(strcmp(b, "195,000 \xC2\xB7 19 lvls \xC2\xB7 2 loops \xC2\xB7 3 fails") == 0);
+    scores_fmt_run(R(195000, 2 * GAME_LEVELS + 3, 6), false, b, sizeof b);   /* Lives: no fails */
+    CHECK(strcmp(b, "195,000 \xC2\xB7 19 lvls \xC2\xB7 2 loops") == 0);
     for (unsigned n = 1; n < 40; n++) {                      /* any size: terminated, never over */
         memset(b, 'x', sizeof b);
-        scores_fmt_run(R(195000, 19, 3), b, n);
+        scores_fmt_run(R(195000, 19, 3), true, b, n);
         CHECK(strlen(b) < n);
     }
 }

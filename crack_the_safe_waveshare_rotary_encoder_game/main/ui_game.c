@@ -432,14 +432,15 @@ static void refresh_settings(void)
 
 /* Five rows, and a sixth when the latest entry is further down than that
  * (with its true place). A row is a whole run: "1.  192,345 \xC2\xB7 19 lvls \xC2\xB7
- * 2 loops \xC2\xB7 3 fails". "--" for an empty place. The latest entry is gold; after a game over the page says so, and
+ * 2 loops \xC2\xB7 3 fails" (no fails in Lives). "--" for an empty place. The latest entry is gold; after a game over the page says so, and
  * its button plays again. */
 #define NEW_ENTRY_COLOR 0xF2C14E
 
-static void fmt_entry(char *out, unsigned n, const char *place, score_entry_t e)
+/* Fails show in Classic only: in Lives a lost life is already in the score. */
+static void fmt_entry(char *out, unsigned n, const char *place, score_entry_t e, bool lives)
 {
     char body[56];
-    scores_fmt_run(e, body, sizeof(body));
+    scores_fmt_run(e, !lives, body, sizeof(body));
     snprintf(out, n, "%s  %s", place, body);
 }
 
@@ -474,7 +475,7 @@ static void refresh_scores(void)
         char buf[64], place[8];
         snprintf(place, sizeof(place), "%d.", i + 1);
         if (i < t->count) {
-            fmt_entry(buf, sizeof(buf), place, t->e[i]);
+            fmt_entry(buf, sizeof(buf), place, t->e[i], lives);
         } else {
             snprintf(buf, sizeof(buf), "%s  --", place);
         }
@@ -492,7 +493,7 @@ static void refresh_scores(void)
         } else {
             snprintf(place, sizeof(place), "%d.", rank + 1);
         }
-        fmt_entry(buf, sizeof(buf), place, latest);
+        fmt_entry(buf, sizeof(buf), place, latest, lives);
         ui_lv_set_text(objects.scores_row_6, buf);
         set_gold(objects.scores_row_6, true);
     }
