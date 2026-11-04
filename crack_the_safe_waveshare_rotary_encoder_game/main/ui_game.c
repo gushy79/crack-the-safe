@@ -117,7 +117,7 @@ static void refresh_play(void)
      * the text and arrows, "harsh" is for the alarming colours. */
     const bool harsh = wrong && g_game.rules != GAME_RULES_ZEN;
     const int  dir = game_stage_dir(&g_game);
-    char buf[16];
+    char buf[40];
 
     set_dial_rotation();
 
@@ -133,8 +133,12 @@ static void refresh_play(void)
     const bool timed = game_timed(&g_game);
     ui_lv_set_hidden(objects.timer_text, !timed);
 
-    snprintf(buf, sizeof(buf), timed ? "Level %u" : "Zen \xC2\xB7 Level %u",
-             g_game.level ? g_game.level : 1);
+    char loop[16] = "";
+    if (g_game.loops > 0) {
+        snprintf(loop, sizeof(loop), " \xC2\xB7 loop %u", g_game.loops + 1u);
+    }
+    snprintf(buf, sizeof(buf), "%sLevel %u%s", timed ? "" : "Zen \xC2\xB7 ",
+             g_game.level ? g_game.level : 1, loop);
     ui_lv_set_text(objects.level_text, buf);
 
     /* Lives: one heart (U+F004, icon font) for each chance left. */

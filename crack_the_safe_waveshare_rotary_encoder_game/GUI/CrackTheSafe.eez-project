@@ -5531,9 +5531,9 @@
             {
               "objID": "f39f2802-9e46-ed8c-3a3c-3be912c5afb0",
               "type": "LVGLLabelWidget",
-              "left": 120,
+              "left": 70,
               "top": 115,
-              "width": 120,
+              "width": 220,
               "height": 0,
               "leftUnit": "px",
               "topUnit": "px",

@@ -1262,8 +1262,8 @@ void create_screen_page_play() {
             // level_text
             lv_obj_t *obj = lv_label_create(parent_obj);
             objects.level_text = obj;
-            lv_obj_set_pos(obj, 120, 115);
-            lv_obj_set_size(obj, 120, LV_SIZE_CONTENT);
+            lv_obj_set_pos(obj, 70, 115);
+            lv_obj_set_size(obj, 220, LV_SIZE_CONTENT);
             lv_label_set_long_mode(obj, LV_LABEL_LONG_CLIP);
             add_style_level_text(obj);
             lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
