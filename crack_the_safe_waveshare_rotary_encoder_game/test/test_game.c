@@ -414,7 +414,7 @@ static void test_clock_freezes_when_the_safe_opens(void)
 
 /* ---- after a loss / win ---------------------------------------------- */
 
-static void test_wrong_hold_then_new_game_same_level(void)
+static void test_wrong_hold_then_new_code_same_level_same_clock(void)
 {
     game_t g;
     begin(&g, 42);
@@ -423,6 +423,7 @@ static void test_wrong_hold_then_new_game_same_level(void)
     turn(&g, game_stage_dir(&g));
     CHECK(g.mode == GAME_WRONG);
     const uint32_t t = g.mode_since_ms;
+    const uint32_t at_miss = game_time_left_ms(&g, t);       /* frozen in the red */
     CHECK(game_tick(&g, t + GAME_WRONG_HOLD_MS - 1) == GAME_EV_NONE);
     CHECK(g.mode == GAME_WRONG);
     unsigned ev = game_tick(&g, t + GAME_WRONG_HOLD_MS);
@@ -433,7 +434,9 @@ static void test_wrong_hold_then_new_game_same_level(void)
     CHECK(g.ticks == 0);                   /* dial back at 0 */
     CHECK(g.stage == 0);
     CHECK(g.timed_out == false);
-    CHECK(game_time_left_ms(&g, t + GAME_WRONG_HOLD_MS) == game_level_ms(3));
+    /* The clock went on from where the miss left it: the hold cost nothing. */
+    CHECK(game_time_left_ms(&g, t + GAME_WRONG_HOLD_MS) == at_miss);
+    CHECK(at_miss > 0 && at_miss <= game_level_ms(3));
 }
 
 static void test_next_level_after_a_win_and_wraparound(void)
@@ -500,67 +503,6 @@ static void test_reset_returns_to_title(void)
     game_rotate(&g, 1, 61000);
     game_start(&g, 62000);
     CHECK(g.level == 1);
-}
-
-/* ---- score ------------------------------------------------------------ */
-
-static void test_score_is_level_times_tenths_left(void)
-{
-    CHECK(game_score(1, 192000u) == 1920u);          /* 3:12 left on level 1 */
-    CHECK(game_score(3, 45000u) == 3u * 450u);
-    CHECK(game_score(8, 20000u) == 8u * 200u);
-    CHECK(game_score(2, 99u) == 0u);                 /* under a tenth: nothing */
-    CHECK(game_score(2, 100u) == 2u);
-    CHECK(game_score(1, 0) == 0u);
-}
-
-static void test_score_clamps_the_level(void)
-{
-    CHECK(game_score(0, 10000u) == game_score(1, 10000u));
-    CHECK(game_score(-3, 10000u) == game_score(1, 10000u));
-    CHECK(game_score(GAME_LEVELS + 5, 10000u) == game_score(GAME_LEVELS, 10000u));
-}
-
-static void test_more_time_left_never_scores_less(void)
-{
-    for (int lv = 1; lv <= GAME_LEVELS; lv++) {
-        uint32_t prev = 0;
-        for (uint32_t ms = 0; ms <= game_level_ms(lv); ms += 250) {
-            const uint32_t s = game_score(lv, ms);
-            CHECK(s >= prev);
-            prev = s;
-        }
-    }
-}
-
-static void test_higher_level_beats_lower_at_the_same_time_left(void)
-{
-    CHECK(game_score(5, 15000u) > game_score(4, 15000u));
-}
-
-static void test_current_score_only_when_unlocked(void)
-{
-    game_t g;
-    begin(&g, 99);
-    CHECK(game_current_score(&g, s_now) == 0);       /* playing */
-    for (int k = 0; k < GAME_CODE_LEN; k++) {
-        solve_stage(&g);
-    }
-    CHECK(g.mode == GAME_UNLOCKED);
-    const uint32_t s = game_current_score(&g, s_now);
-    CHECK(s == game_score(g.level, game_time_left_ms(&g, s_now)));
-    CHECK(s > 0);
-    CHECK(game_current_score(&g, s_now + 100000) == s);   /* frozen at the opening */
-}
-
-static void test_no_score_for_a_loss(void)
-{
-    game_t g;
-    begin(&g, 42);
-    go_to_target(&g);
-    turn(&g, game_stage_dir(&g));
-    CHECK(g.mode == GAME_WRONG);
-    CHECK(game_current_score(&g, s_now) == 0);
 }
 
 /* ---- pause ------------------------------------------------------------ */
@@ -756,16 +698,13 @@ static void test_run_totals_add_up_across_safes_and_loops(void)
 {
     game_t g;
     begin_rules(&g, 11, GAME_RULES_LIVES);
-    uint32_t sum = 0;
     for (int n = 1; n <= GAME_LEVELS + 2; n++) {       /* a whole loop and two more */
         open_next(&g);
-        sum += game_current_score(&g, s_now);
         CHECK(g.run_levels == n);
-        CHECK(g.run_score == sum);
+        CHECK(game_run_score(&g) / GAME_RUN_SAFE_POINTS == (uint32_t)n);
         s_now += GAME_REPLAY_LOCKOUT_MS;
         game_tap(&g, s_now);
     }
-    CHECK(sum > 0);
     CHECK(g.level == 3);                               /* round the loop and on */
     CHECK(g.loops == 1);                               /* one trip round the levels */
     CHECK(g.lives == GAME_LIVES);
@@ -778,19 +717,156 @@ static void test_run_totals_survive_lost_lives_and_end_with_the_game(void)
     open_next(&g);
     s_now += GAME_REPLAY_LOCKOUT_MS;
     game_tap(&g, s_now);
-    const uint32_t kept = g.run_score;
-    CHECK(kept > 0 && g.run_levels == 1);
+    const uint32_t kept = game_run_score(&g);
+    CHECK(kept > 0 && g.run_levels == 1 && g.run_fails == 0);
     lose(&g);
-    hold_red(&g);                                      /* a life lost: the run goes on */
-    CHECK(g.run_score == kept && g.run_levels == 1);
+    CHECK(g.run_fails == 1);
+    CHECK(hold_red(&g) & GAME_EV_RETRY);               /* a life lost: the run goes on */
+    CHECK(g.run_levels == 1);
     lose(&g);
-    CHECK(g.run_score == kept && g.run_levels == 1);   /* still there for the caller */
     CHECK(hold_red(&g) & GAME_EV_RETRY);
     lose(&g);
-    CHECK(g.lives == 0);
-    CHECK(g.run_score == kept && g.run_levels == 1);
+    CHECK(g.lives == 0 && g.run_fails == 3);
+    CHECK(game_run_over(&g));
+    CHECK(g.run_levels == 1);                          /* still there for the caller */
     CHECK(hold_red(&g) & GAME_EV_OVER);
-    CHECK(g.mode == GAME_TITLE && g.run_score == 0 && g.run_levels == 0);
+    CHECK(g.mode == GAME_TITLE && g.run_levels == 0 && g.run_fails == 0);
+}
+
+/* ---- the run score ----------------------------------------------------- */
+
+static game_t synth(game_rules_t r, unsigned safes, uint32_t avg_speed, unsigned fails)
+{
+    game_t g;
+    game_init(&g, 1);
+    game_set_rules(&g, r);
+    g.run_levels = (uint16_t)safes;
+    g.run_speed = avg_speed * safes;
+    g.run_fails = (uint16_t)fails;
+    return g;
+}
+
+static void test_run_score_more_safes_always_wins(void)
+{
+    const game_rules_t modes[2] = { GAME_RULES_CLASSIC, GAME_RULES_LIVES };
+    for (int m = 0; m < 2; m++) {
+        for (unsigned n = 1; n < 300; n++) {
+            /* The flawless, fastest run of n safes against the slowest, messiest of n + 1. */
+            const game_t best = synth(modes[m], n, 10000u, 0);
+            const game_t worst = synth(modes[m], n + 1, 0, 90);
+            CHECK(game_run_score(&worst) > game_run_score(&best));
+            CHECK(game_run_score(&best) / GAME_RUN_SAFE_POINTS == n);
+        }
+    }
+}
+
+static void test_run_score_same_safes_faster_wins(void)
+{
+    uint32_t prev = 0;
+    for (uint32_t sp = 0; sp <= 10000; sp += 250) {
+        const game_t g = synth(GAME_RULES_CLASSIC, 5, sp, 0);
+        CHECK(game_run_score(&g) >= prev);
+        prev = game_run_score(&g);
+    }
+    const game_t a = synth(GAME_RULES_LIVES, 6, 7000, 0);
+    const game_t b = synth(GAME_RULES_LIVES, 6, 3000, 0);
+    CHECK(game_run_score(&a) > game_run_score(&b));
+}
+
+static void test_run_score_lives_fails_cost_speed_classic_fails_do_not(void)
+{
+    const game_t clean = synth(GAME_RULES_LIVES, 4, 8000, 0);
+    const game_t one = synth(GAME_RULES_LIVES, 4, 8000, 1);
+    const game_t two = synth(GAME_RULES_LIVES, 4, 8000, 2);
+    CHECK(game_run_score(&clean) > game_run_score(&one));
+    CHECK(game_run_score(&one) > game_run_score(&two));
+    CHECK(game_run_score(&one) == 4 * GAME_RUN_SAFE_POINTS + 8000 * GAME_FAIL_KEEP_PCT / 100);
+    CHECK(game_run_score(&two) >= 4 * GAME_RUN_SAFE_POINTS);      /* never below the safes */
+
+    const game_t c0 = synth(GAME_RULES_CLASSIC, 4, 8000, 0);
+    const game_t c9 = synth(GAME_RULES_CLASSIC, 4, 8000, 9);
+    CHECK(game_run_score(&c0) == game_run_score(&c9));
+}
+
+static void test_run_score_zero_without_safes_and_in_zen(void)
+{
+    game_t g = synth(GAME_RULES_CLASSIC, 0, 0, 3);
+    CHECK(game_run_score(&g) == 0);
+    g = synth(GAME_RULES_ZEN, 5, 9000, 0);
+    CHECK(game_run_score(&g) == 0);
+    g = synth(GAME_RULES_LIVES, 7, 99999, 0);          /* nonsense speed is clamped */
+    CHECK(game_run_score(&g) == 7 * GAME_RUN_SAFE_POINTS + GAME_RUN_SAFE_POINTS - 1);
+}
+
+static void test_a_real_safe_adds_its_clock_share(void)
+{
+    game_t g;
+    begin(&g, 99);
+    open_next(&g);
+    CHECK(g.run_levels == 1);
+    /* Opened at once: nearly the whole clock was left. */
+    CHECK(g.run_speed > 9000 && g.run_speed <= 10000);
+    CHECK(game_run_score(&g) > GAME_RUN_SAFE_POINTS);
+    CHECK(game_run_score(&g) < 2 * GAME_RUN_SAFE_POINTS);
+}
+
+/* ---- Classic ends on the clock ------------------------------------------ */
+
+static void test_classic_miss_keeps_the_clock_and_the_run(void)
+{
+    game_t g;
+    begin(&g, 21);
+    open_next(&g);
+    s_now += GAME_REPLAY_LOCKOUT_MS;
+    game_tap(&g, s_now);                               /* level 2 */
+    s_now += 20000;
+    const uint32_t left = game_time_left_ms(&g, s_now);
+    const uint8_t old_first = g.code[0];
+    go_to_target(&g);
+    turn(&g, game_stage_dir(&g));                      /* a miss */
+    CHECK(g.mode == GAME_WRONG && g.run_fails == 1 && !g.timed_out);
+    CHECK(!game_run_over(&g));
+    const uint32_t at_miss = game_time_left_ms(&g, s_now);   /* frozen in the red */
+    const unsigned ev = hold_red(&g);
+    CHECK((ev & GAME_EV_RESUMED) && (ev & GAME_EV_STARTED));
+    CHECK(!(ev & GAME_EV_OVER));
+    CHECK(g.mode == GAME_PLAY && g.level == 2 && g.run_levels == 1 && g.run_fails == 1);
+    CHECK(g.ticks == 0 && g.stage == 0);
+    (void)old_first;
+    /* The red hold cost nothing: the clock is where it was. */
+    CHECK(game_time_left_ms(&g, s_now) <= left);
+    CHECK(game_time_left_ms(&g, s_now) == at_miss);          /* the red hold was not charged */
+    CHECK(at_miss <= left);
+    CHECK(game_time_left_ms(&g, s_now) < game_level_ms(2) - 15000);   /* not restarted to full */
+}
+
+static void test_classic_clock_running_out_ends_the_run(void)
+{
+    game_t g;
+    begin(&g, 21);
+    open_next(&g);
+    s_now += GAME_REPLAY_LOCKOUT_MS;
+    game_tap(&g, s_now);
+    s_now += game_level_ms(2) + 1;
+    CHECK(game_tick(&g, s_now) & GAME_EV_TIMEOUT);
+    CHECK(g.run_fails == 0);                           /* the clock is not a fail */
+    CHECK(game_run_over(&g));
+    CHECK(g.run_levels == 1);
+    const unsigned ev = hold_red(&g);
+    CHECK(ev & GAME_EV_OVER);
+    CHECK(g.mode == GAME_TITLE && g.rules == GAME_RULES_CLASSIC);
+}
+
+static void test_zen_never_ends(void)
+{
+    game_t g;
+    begin_rules(&g, 8, GAME_RULES_ZEN);
+    for (int i = 0; i < 5; i++) {
+        lose(&g);
+        CHECK(!game_run_over(&g));
+        CHECK(!(hold_red(&g) & GAME_EV_OVER));
+        CHECK(g.mode == GAME_PLAY);
+    }
 }
 
 static void test_classic_loss_still_deals_fresh_numbers(void)
@@ -816,7 +892,7 @@ static void test_zen_has_no_clock_and_no_score(void)
         solve_stage(&g);
     }
     CHECK(g.mode == GAME_UNLOCKED);
-    CHECK(game_current_score(&g, s_now) == 0);
+    CHECK(game_run_score(&g) == 0);
 }
 
 static void test_rules_survive_reset_and_bad_values_fall_back(void)
@@ -942,17 +1018,11 @@ int main(void)
     RUN(test_time_left_counts_down);
     RUN(test_timeout_loses_with_flag);
     RUN(test_clock_freezes_when_the_safe_opens);
-    RUN(test_wrong_hold_then_new_game_same_level);
+    RUN(test_wrong_hold_then_new_code_same_level_same_clock);
     RUN(test_next_level_after_a_win_and_wraparound);
     RUN(test_tap_after_lockout_starts_next_level);
     RUN(test_game_new_goes_to_level_one);
     RUN(test_reset_returns_to_title);
-    RUN(test_score_is_level_times_tenths_left);
-    RUN(test_score_clamps_the_level);
-    RUN(test_more_time_left_never_scores_less);
-    RUN(test_higher_level_beats_lower_at_the_same_time_left);
-    RUN(test_current_score_only_when_unlocked);
-    RUN(test_no_score_for_a_loss);
     RUN(test_pause_stops_the_clock);
     RUN(test_pause_holds_the_red_timer);
     RUN(test_classic_is_the_default_and_has_no_lives);
@@ -963,6 +1033,14 @@ int main(void)
     RUN(test_lives_out_of_lives_ends_the_game);
     RUN(test_run_totals_add_up_across_safes_and_loops);
     RUN(test_run_totals_survive_lost_lives_and_end_with_the_game);
+    RUN(test_run_score_more_safes_always_wins);
+    RUN(test_run_score_same_safes_faster_wins);
+    RUN(test_run_score_lives_fails_cost_speed_classic_fails_do_not);
+    RUN(test_run_score_zero_without_safes_and_in_zen);
+    RUN(test_a_real_safe_adds_its_clock_share);
+    RUN(test_classic_miss_keeps_the_clock_and_the_run);
+    RUN(test_classic_clock_running_out_ends_the_run);
+    RUN(test_zen_never_ends);
     RUN(test_lives_a_win_keeps_the_lives_left);
     RUN(test_lives_timeout_ends_the_game_whatever_is_left);
     RUN(test_lives_new_game_restores_full_lives_and_level_one);

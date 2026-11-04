@@ -26,10 +26,16 @@ static int s_checks, s_failed;
         printf("%s %s\n", s_failed == before ? "ok  " : "FAIL", #fn);        \
     } while (0)
 
-static score_entry_t E(uint32_t score, uint16_t levels)
+/* A run whose score agrees with its safes (score = safes x 10,000 + speed):
+ * `x` is points above one safe's worth, `fails` just tags the entry. */
+static score_entry_t E(uint32_t x, uint16_t fails)
 {
-    return (score_entry_t){ .score = score, .levels = levels };
+    const uint32_t score = GAME_RUN_SAFE_POINTS + x;
+    return (score_entry_t){ .score = score,
+                            .levels = (uint16_t)(score / GAME_RUN_SAFE_POINTS),
+                            .fails = fails };
 }
+#define S(x) (E((x), 0).score)
 
 static void test_empty_table(void)
 {
@@ -47,14 +53,14 @@ static void test_first_entry_is_rank_zero(void)
     scores_clear(&t);
     CHECK(scores_insert(&t, E(500, 1)) == 0);
     CHECK(t.count == 1);
-    CHECK(t.e[0].score == 500 && t.e[0].levels == 1);
+    CHECK(t.e[0].score == S(500) && t.e[0].levels == 1);
 }
 
 static void test_zero_score_is_rejected(void)
 {
     score_table_t t;
     scores_clear(&t);
-    CHECK(scores_insert(&t, E(0, 1)) == -1);
+    CHECK(scores_insert(&t, (score_entry_t){ .score = 0, .levels = 1 }) == -1);
     CHECK(t.count == 0);
 }
 
@@ -67,8 +73,8 @@ static void test_orders_best_first(void)
     CHECK(scores_insert(&t, E(600, 1)) == 1);     /* in the middle */
     CHECK(scores_insert(&t, E(100, 1)) == 3);     /* last */
     CHECK(t.count == 4);
-    CHECK(t.e[0].score == 900 && t.e[1].score == 600 &&
-          t.e[2].score == 300 && t.e[3].score == 100);
+    CHECK(t.e[0].score == S(900) && t.e[1].score == S(600) &&
+          t.e[2].score == S(300) && t.e[3].score == S(100));
     CHECK(scores_valid(&t));
 }
 
@@ -86,11 +92,11 @@ static void test_full_table_drops_the_worst(void)
 {
     score_table_t t;
     fill(&t);
-    CHECK(t.e[SCORES_MAX - 1].score == 100);
+    CHECK(t.e[SCORES_MAX - 1].score == S(100));
     CHECK(scores_insert(&t, E(350, 2)) == SCORES_MAX - 3);    /* above 300, 200, 100 */
     CHECK(t.count == SCORES_MAX);
-    CHECK(t.e[SCORES_MAX - 1].score == 200);                  /* 100 pushed out */
-    CHECK(t.e[SCORES_MAX - 2].score == 300 && t.e[SCORES_MAX - 3].score == 350);
+    CHECK(t.e[SCORES_MAX - 1].score == S(200));               /* 100 pushed out */
+    CHECK(t.e[SCORES_MAX - 2].score == S(300) && t.e[SCORES_MAX - 3].score == S(350));
     CHECK(scores_valid(&t));
 }
 
@@ -99,12 +105,12 @@ static void test_too_low_for_a_full_table_is_rejected(void)
     score_table_t t;
     fill(&t);
     const score_table_t before = t;
-    CHECK(!scores_qualifies(&t, 100));                 /* ties the worst: out */
-    CHECK(!scores_qualifies(&t, 50));
+    CHECK(!scores_qualifies(&t, S(100)));              /* ties the worst: out */
+    CHECK(!scores_qualifies(&t, S(50)));
     CHECK(scores_insert(&t, E(100, 3)) == -1);
     CHECK(scores_insert(&t, E(50, 3)) == -1);
     CHECK(memcmp(&t, &before, sizeof t) == 0);         /* untouched */
-    CHECK(scores_qualifies(&t, 101));
+    CHECK(scores_qualifies(&t, S(101)));
 }
 
 static void test_a_low_score_gets_its_true_place_past_the_visible_five(void)
@@ -114,7 +120,7 @@ static void test_a_low_score_gets_its_true_place_past_the_visible_five(void)
     /* 104th best: 103 scores are higher (100 x SCORES_MAX down to ...). */
     const uint32_t s = (uint32_t)(SCORES_MAX - 103) * 100 + 50;
     CHECK(scores_insert(&t, E(s, 2)) == 103);          /* rank 103 = the 104th place */
-    CHECK(t.e[103].score == s && t.e[102].score > s && t.e[104].score < s);
+    CHECK(t.e[103].score == S(s) && t.e[102].score > S(s) && t.e[104].score < S(s));
     CHECK(103 >= SCORES_SHOWN);
     CHECK(scores_valid(&t));
 }
@@ -125,19 +131,19 @@ static void test_equal_score_ranks_below_the_earlier_one(void)
     scores_clear(&t);
     scores_insert(&t, E(400, 11));
     CHECK(scores_insert(&t, E(400, 22)) == 1);
-    CHECK(t.e[0].levels == 11 && t.e[1].levels == 22);
+    CHECK(t.e[0].fails == 11 && t.e[1].fails == 22);
     CHECK(scores_insert(&t, E(400, 33)) == 2);
-    CHECK(t.e[2].levels == 33);
+    CHECK(t.e[2].fails == 33);
 }
 
 static void test_new_best_into_a_full_table(void)
 {
     score_table_t t;
     fill(&t);
-    CHECK(scores_insert(&t, E(999999, 8)) == 0);
+    CHECK(scores_insert(&t, E(999999, 8)) == 0);   /* 99 safes' worth */
     CHECK(t.count == SCORES_MAX);
-    CHECK(t.e[0].score == 999999 && t.e[1].score == 100u * SCORES_MAX);
-    CHECK(t.e[SCORES_MAX - 1].score == 200);
+    CHECK(t.e[0].score == S(999999) && t.e[1].score == S(100u * SCORES_MAX));
+    CHECK(t.e[SCORES_MAX - 1].score == S(200));
     CHECK(scores_valid(&t));
 }
 
@@ -148,7 +154,7 @@ static void test_table_never_breaks_under_many_inserts(void)
     uint32_t x = 12345;
     for (int i = 0; i < 2000; i++) {
         x = x * 1664525u + 1013904223u;
-        scores_insert(&t, E(x % 3000, (uint16_t)(1 + x % 30)));
+        scores_insert(&t, E(x % 30000, (uint16_t)(x % 30)));
         CHECK(scores_valid(&t));
     }
     CHECK(t.count == SCORES_MAX);
@@ -167,7 +173,7 @@ static void test_valid_rejects_corrupt_tables(void)
     CHECK(!scores_valid(&bad));
 
     bad = t;
-    bad.e[1].score = 600;                              /* out of order */
+    bad.e[1].score = S(600);                           /* out of order */
     CHECK(!scores_valid(&bad));
 
     bad = t;
@@ -182,7 +188,7 @@ static void test_valid_rejects_implausible_entries(void)
 {
     score_table_t t;
     scores_clear(&t);
-    scores_insert(&t, E(500, GAME_LEVELS));       /* the extremes are fine */
+    scores_insert(&t, E(9999 + 10000 * (GAME_LEVELS - 1), 7));
     CHECK(scores_valid(&t));
 
     score_table_t bad = t;
@@ -193,26 +199,38 @@ static void test_valid_rejects_implausible_entries(void)
     bad.e[0].levels = 0xFFFF;
     CHECK(!scores_valid(&bad));
 
-    bad = t;
-    bad.e[0].left_s = SCORES_MAX_LEFT_S + 1;           /* longer than any clock */
+    bad = t;                                           /* a score that disagrees with its safes */
+    bad.e[0].levels = 3;
     CHECK(!scores_valid(&bad));
+    bad = t;
+    bad.e[0].score += GAME_RUN_SAFE_POINTS;
+    CHECK(!scores_valid(&bad));
+}
+
+static score_entry_t R(uint32_t score, uint16_t levels, uint16_t fails)
+{
+    return (score_entry_t){ .score = score, .levels = levels, .fails = fails };
 }
 
 static void test_run_text(void)
 {
-    char b[48];
-    scores_fmt_run(E(1359, 3), b, sizeof b);
-    CHECK(strcmp(b, "1,359 \xC2\xB7 3 lvls") == 0);
-    scores_fmt_run(E(200, 1), b, sizeof b);
-    CHECK(strcmp(b, "200 \xC2\xB7 1 lvl") == 0);
-    scores_fmt_run(E(9000, 7), b, sizeof b);                 /* not a whole loop yet */
+    char b[64];
+    scores_fmt_run(R(31359, 3, 0), b, sizeof b);
+    CHECK(strcmp(b, "31,359 \xC2\xB7 3 lvls") == 0);
+    scores_fmt_run(R(10200, 1, 0), b, sizeof b);
+    CHECK(strcmp(b, "10,200 \xC2\xB7 1 lvl") == 0);
+    scores_fmt_run(R(79000, 7, 1), b, sizeof b);             /* not a whole loop yet */
     CHECK(strstr(b, "loop") == NULL);
-    scores_fmt_run(E(12345, GAME_LEVELS), b, sizeof b);
-    CHECK(strcmp(b, "12,345 \xC2\xB7 8 lvls \xC2\xB7 1 loop") == 0);
-    scores_fmt_run(E(99999, 2 * GAME_LEVELS + 3), b, sizeof b);
-    CHECK(strcmp(b, "99,999 \xC2\xB7 19 lvls \xC2\xB7 2 loops") == 0);
-    scores_fmt_run(E(99999, 19), b, 8);                      /* too small: truncated, terminated */
-    CHECK(strlen(b) < 8);
+    CHECK(strcmp(b, "79,000 \xC2\xB7 7 lvls \xC2\xB7 1 fail") == 0);
+    scores_fmt_run(R(81234, GAME_LEVELS, 0), b, sizeof b);
+    CHECK(strcmp(b, "81,234 \xC2\xB7 8 lvls \xC2\xB7 1 loop") == 0);
+    scores_fmt_run(R(195000, 2 * GAME_LEVELS + 3, 3), b, sizeof b);
+    CHECK(strcmp(b, "195,000 \xC2\xB7 19 lvls \xC2\xB7 2 loops \xC2\xB7 3 fails") == 0);
+    for (unsigned n = 1; n < 40; n++) {                      /* any size: terminated, never over */
+        memset(b, 'x', sizeof b);
+        scores_fmt_run(R(195000, 19, 3), b, n);
+        CHECK(strlen(b) < n);
+    }
 }
 
 static void test_thousands_separators(void)

@@ -18,37 +18,6 @@ static void key_for(int mode, char *key, size_t n)
     snprintf(key, n, mode == 1 ? "l%d" : "c%d", mode);
 }
 
-/* The first versions kept only the top five (a 44-byte blob), under "t0" for
- * Classic and, briefly, "r1" for Lives. Read those once so no score is lost. */
-typedef struct {
-    uint32_t score;
-    uint8_t  level;
-    uint16_t left_s;
-} legacy_entry_t;
-
-typedef struct {
-    uint8_t        count;
-    legacy_entry_t e[5];
-} legacy_table_t;
-
-static void load_legacy(nvs_handle_t h, int mode, score_table_t *t)
-{
-    legacy_table_t old;
-    size_t len = sizeof(old);
-    if (nvs_get_blob(h, mode == 1 ? "r1" : "t0", &old, &len) != ESP_OK ||
-        len != sizeof(old) || old.count > 5) {
-        return;
-    }
-    for (int i = 0; i < old.count; i++) {
-        score_entry_t e = { .score = old.e[i].score, .levels = old.e[i].level,
-                            .left_s = old.e[i].left_s };
-        scores_insert(t, e);
-    }
-    if (!scores_valid(t)) {
-        scores_clear(t);
-    }
-}
-
 void score_store_load(int mode, score_table_t *t)
 {
     scores_clear(t);
@@ -63,9 +32,7 @@ void score_store_load(int mode, score_table_t *t)
     const esp_err_t err = nvs_get_blob(h, key, &got, &len);
     if (err == ESP_OK && len == sizeof(got) && scores_valid(&got)) {
         *t = got;
-    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
-        load_legacy(h, mode, t);       /* the next save moves it to the new key */
-    } else {
+    } else if (err != ESP_ERR_NVS_NOT_FOUND) {      /* absent = nothing saved yet */
         ESP_LOGW(TAG, "mode %d: no usable saved table, starting empty", mode);
     }
     nvs_close(h);

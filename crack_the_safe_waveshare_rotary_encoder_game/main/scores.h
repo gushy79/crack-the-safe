@@ -16,19 +16,15 @@
 /* How many places the Scores page lists, and how many the table remembers. */
 #define SCORES_SHOWN 5
 #define SCORES_MAX 250
-/* The longest clock is 5:00, so no entry can have more seconds left. */
-#define SCORES_MAX_LEFT_S 300
-/* A run longer than this many safes is not something a table will hold. */
 #define SCORES_MAX_LEVELS 9999
 
-/* Classic: one safe -- its level (1..GAME_LEVELS) and the seconds left.
- * Lives: a whole run, every safe opened until the lives or the clock ran
- * out -- the sum of their scores and how many (GAME_LEVELS make one loop of
- * the levels); left_s is 0. */
+/* One run (see game_run_score): its score, the safes opened (GAME_LEVELS
+ * make one loop of the levels) and the misses. The score is
+ * levels x 10,000 + speed points, so it always agrees with `levels`. */
 typedef struct {
     uint32_t score;
     uint16_t levels;    /* 1..SCORES_MAX_LEVELS */
-    uint16_t left_s;    /* whole seconds that were left on the clock */
+    uint16_t fails;
 } score_entry_t;
 
 typedef struct {
@@ -53,8 +49,9 @@ int scores_insert(score_table_t *t, score_entry_t entry);
  *  first, no empty scores)? A bad one should be replaced by an empty one. */
 bool scores_valid(const score_table_t *t);
 
-/** A run for a table row or the game-over line: "12,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops"
- *  (loops only once a whole loop of the levels was completed). */
+/** A run for a table row or the game-over line:
+ *  "192,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops \xC2\xB7 3 fails" (loops once a whole loop
+ *  of the levels was completed, fails when there were any). */
 void scores_fmt_run(score_entry_t e, char *out, unsigned out_len);
 
 /** Write a number with thousands separators ("1,920") into out, always

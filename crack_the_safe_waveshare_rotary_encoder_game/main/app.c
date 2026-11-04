@@ -66,7 +66,6 @@ static bool s_prize_played;
  * entries are single safes; Lives' are whole runs (every safe opened until
  * the lives or the clock ran out). Zen is not scored. */
 static score_table_t s_scores[SCORE_MODES];
-static uint32_t s_last_score;      /* the safe just opened (Classic's table) */
 /* The latest entry made: its table and place (-1 = it did not make the
  * table), shown highlighted on the Scores page. A run that did not place is
  * kept here to show on the game-over page. */
@@ -98,37 +97,24 @@ static void note_entry(int mode, score_entry_t e)
     }
 }
 
-/* Classic: the safe just opened is scored on its own. (Lives adds it to the
- * run, recorded when the run ends.) */
-static void record_score(void)
-{
-    const uint32_t now = app_now_ms();
-    s_last_score = game_current_score(&g_game, now);
-    if (s_last_score == 0 || g_game.rules != GAME_RULES_CLASSIC) {
-        return;                    /* Zen, no time left, or a run in progress */
-    }
-    note_entry(0, (score_entry_t){
-        .score  = s_last_score,
-        .levels = (uint16_t)(g_game.loops * GAME_LEVELS + g_game.level),   /* the safe's number in the game */
-        .left_s = (uint16_t)(game_time_left_ms(&g_game, now) / 1000u),
-    });
-    ESP_LOGI(TAG, "score %lu, rank %d", (unsigned long)s_last_score, s_new_rank);
-}
-
-/* Lives: the run is over (or given up): put it in the table. */
+/* The run is over (or given up): score it and, if it makes the table, save
+ * it. Zen runs are not scored. */
 static void record_run(void)
 {
-    if (g_game.rules != GAME_RULES_LIVES || g_game.run_levels == 0) {
+    if (g_game.rules == GAME_RULES_ZEN || g_game.run_levels == 0) {
         return;
     }
-    note_entry(1, (score_entry_t){
-        .score  = g_game.run_score,
+    note_entry(score_mode(), (score_entry_t){
+        .score  = game_run_score(&g_game),
         .levels = g_game.run_levels,
+        .fails  = g_game.run_fails,
     });
-    ESP_LOGI(TAG, "run %lu over %u safes, rank %d", (unsigned long)g_game.run_score,
-             (unsigned)g_game.run_levels, s_new_rank);
-    g_game.run_score = 0;          /* recorded: not again */
+    ESP_LOGI(TAG, "run %lu over %u safes, %u fails, rank %d",
+             (unsigned long)game_run_score(&g_game), (unsigned)g_game.run_levels,
+             (unsigned)g_game.run_fails, s_new_rank);
+    g_game.run_speed = 0;          /* recorded: not again */
     g_game.run_levels = 0;
+    g_game.run_fails = 0;
 }
 
 /* Write a waiting table to flash; a failure is logged, and the table stays in
@@ -149,16 +135,6 @@ const score_table_t *app_scores(void)
 int app_scores_view(void)
 {
     return s_scores_view;
-}
-
-uint32_t app_last_score(void)
-{
-    return s_last_score;
-}
-
-int app_last_rank(void)
-{
-    return s_new_mode == 0 ? s_new_rank : -1;
 }
 
 bool app_scores_game_over(void)
@@ -311,7 +287,7 @@ static void handle(unsigned ev)
             sound_siren();   /* for as long as the police lights flash */
         }
         ESP_LOGI(TAG, "wrong -- attempt %u, new code", g_game.attempts);
-        if (g_game.rules == GAME_RULES_LIVES && g_game.lives == 0) {
+        if (game_run_over(&g_game)) {
             record_run();           /* the last life, or the clock: the run is over */
         }
     }
@@ -321,7 +297,6 @@ static void handle(unsigned ev)
         sound_vault_door();
         s_hum_played = false;
         s_prize_played = false;
-        record_score();
         ESP_LOGI(TAG, "unlocked in %u attempt(s), %lus", g_game.attempts,
                  (unsigned long)game_elapsed_s(&g_game, app_now_ms()));
     }
@@ -330,7 +305,7 @@ static void handle(unsigned ev)
          * how it went, and its button plays again. */
         ESP_LOGI(TAG, "game over");
         s_game_over = true;
-        s_scores_view = 1;
+        s_scores_view = score_mode();
         over_push(OVER_SCORES);
     }
     if (ev) {

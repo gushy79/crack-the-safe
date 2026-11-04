@@ -47,14 +47,10 @@ void app_volume_step(int steps);
 /** Settings' Haptics -/+. */
 void app_haptic_step(int steps);
 
-/* High scores (the table for the current mode) and the last opened safe's
- * score. The rank is 0 for a new best, 1..4 for a place in the table, -1 if it
- * did not make it. */
+/* High scores: a table of runs per scored mode (see game_run_score). */
 const score_table_t *app_scores(void);
 /** Which table the Scores page is showing: 0 Classic, 1 Lives. The knob flips it. */
 int app_scores_view(void);
-uint32_t app_last_score(void);
-int app_last_rank(void);
 /** The Scores page is showing a game over (its button plays again). */
 bool app_scores_game_over(void);
 /** The latest entry made, if it belongs to the table shown: its place (0 = best;

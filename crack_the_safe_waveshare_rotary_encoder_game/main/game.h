@@ -69,7 +69,8 @@ typedef enum {
 /* How a game is played. Chosen with game_set_rules() and applied by the next
  * game_new(); it survives game_reset(). */
 typedef enum {
-    GAME_RULES_CLASSIC = 0,  /* a loss deals fresh numbers */
+    GAME_RULES_CLASSIC = 0,  /* a miss deals fresh numbers, the clock keeps running;
+                              * the clock running out ends the run */
     GAME_RULES_LIVES,        /* GAME_LIVES lives: a loss repeats the same code,
                               * out of lives (or time) deals fresh numbers */
     GAME_RULES_ZEN,          /* no clock, no score */
@@ -100,7 +101,8 @@ typedef struct {
     game_rules_t rules;               /* Classic, Lives or Zen */
     uint8_t  lives;                   /* Lives: chances left, this one included */
     uint8_t  start_dial;              /* the dial value the code was dealt from */
-    uint32_t run_score;               /* scores of the safes opened since this run began */
+    uint32_t run_speed;               /* per safe opened in this run: its share of the clock left, 0..10000, summed */
+    uint16_t run_fails;               /* misses in this run (the clock running out is not one) */
     uint16_t loops;                   /* times the levels have wrapped round since the game began */
     uint16_t run_levels;              /* ... and how many (8 make a loop of the levels) */
     /* Two independent streams, so what is dealt never depends on how many
@@ -189,13 +191,24 @@ uint32_t game_time_left_ms(const game_t *g, uint32_t now_ms);
 /** The level the next game will be (after a win, the one after). */
 int game_next_level(const game_t *g);
 
-/**
- * Score for opening a safe: the level times the tenths of a second left on
- * the clock. A pure function of two numbers, so anything that knows the level
- * and the time left (a leaderboard server, say) can recompute it.
+/* ---- Score: for a whole run ----
+ *
+ * A run is every safe opened from New Game until the clock (Classic) or the
+ * lives (Lives) run out. It ranks by, in order: safes opened -- one more
+ * always wins, loops of the levels included --, then speed (the average share
+ * of each level's clock that was left), then, in Lives, the lost lives.
+ * All of that fits in one number that can never mislead the order:
+ *
+ *   score = safes x 10,000 + speed points, speed points 0..9,999
  */
-uint32_t game_score(int level, uint32_t time_left_ms);
+#define GAME_RUN_SAFE_POINTS 10000u
+/* Lives: each lost life keeps this many percent of the speed points. */
+#define GAME_FAIL_KEEP_PCT   90
 
-/** The score of the safe just opened (frozen at the opening); 0 otherwise,
- *  and always 0 in Zen. */
-uint32_t game_current_score(const game_t *g, uint32_t now_ms);
+/** The run's score so far; 0 in Zen and before the first safe opens. A pure
+ *  function of the run's totals, so a leaderboard server can recompute it. */
+uint32_t game_run_score(const game_t *g);
+
+/** The red hold of a loss that ends the run (Classic: the clock; Lives: the
+ *  last life or the clock). False in Zen and for any loss that plays on. */
+bool game_run_over(const game_t *g);

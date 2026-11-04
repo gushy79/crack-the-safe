@@ -56,7 +56,7 @@ bool scores_valid(const score_table_t *t)
             return false;
         }
         if (t->e[i].levels < 1 || t->e[i].levels > SCORES_MAX_LEVELS ||
-            t->e[i].left_s > SCORES_MAX_LEFT_S) {
+            t->e[i].score / GAME_RUN_SAFE_POINTS != t->e[i].levels) {
             return false;                  /* not something the game could write */
         }
         if (i > 0 && t->e[i].score > t->e[i - 1].score) {
@@ -91,10 +91,24 @@ void scores_fmt_run(score_entry_t e, char *out, unsigned out_len)
     char num[16];
     scores_fmt_thousands(e.score, num, sizeof(num));
     const unsigned loops = e.levels / GAME_LEVELS;
-    int n = snprintf(out, out_len, "%s \xC2\xB7 %u %s", num, (unsigned)e.levels,
+    unsigned n = 0;
+    int k = snprintf(out, out_len, "%s \xC2\xB7 %u %s", num, (unsigned)e.levels,
                      e.levels == 1 ? "lvl" : "lvls");
-    if (loops > 0 && n > 0 && (unsigned)n < out_len) {
-        snprintf(out + n, out_len - (unsigned)n, " \xC2\xB7 %u %s", loops,
-                 loops == 1 ? "loop" : "loops");
+    if (k > 0 && (unsigned)k < out_len) {
+        n = (unsigned)k;
+    } else {
+        return;
+    }
+    if (loops > 0) {
+        k = snprintf(out + n, out_len - n, " \xC2\xB7 %u %s", loops,
+                     loops == 1 ? "loop" : "loops");
+        if (k < 0 || (unsigned)k >= out_len - n) {
+            return;
+        }
+        n += (unsigned)k;
+    }
+    if (e.fails > 0) {
+        snprintf(out + n, out_len - n, " \xC2\xB7 %u %s", (unsigned)e.fails,
+                 e.fails == 1 ? "fail" : "fails");
     }
 }

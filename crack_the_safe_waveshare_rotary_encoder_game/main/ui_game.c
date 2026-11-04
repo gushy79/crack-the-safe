@@ -284,23 +284,10 @@ static void refresh_unlocked(void)
         snprintf(buf, sizeof(buf), "Level %u", g_game.level);
     }
     ui_lv_set_text(objects.reward_meta, buf);
-    /* The score, and whether it made the Top 5 (rank 0 = a new best). */
+    /* The run's score so far; it goes in the table when the run ends. */
     char num[16];
-    scores_fmt_thousands(app_last_score(), num, sizeof(num));
-    const int rank = app_last_rank();
-    if (g_game.rules == GAME_RULES_LIVES) {
-        /* A run: this safe's score and the total so far (the table gets the
-         * run when it ends). */
-        char tot[16];
-        scores_fmt_thousands(g_game.run_score, tot, sizeof(tot));
-        snprintf(buf, sizeof(buf), "+%s \xC2\xB7 Run %s", num, tot);
-    } else if (rank == 0) {
-        snprintf(buf, sizeof(buf), "New best! %s", num);
-    } else if (rank > 0) {
-        snprintf(buf, sizeof(buf), "Score %s \xC2\xB7 #%d", num, rank + 1);
-    } else {
-        snprintf(buf, sizeof(buf), "Score %s", num);
-    }
+    scores_fmt_thousands(game_run_score(&g_game), num, sizeof(num));
+    snprintf(buf, sizeof(buf), "Run %s", num);
     if (g_game.rules == GAME_RULES_ZEN) {
         snprintf(buf, sizeof(buf), "Zen \xC2\xB7 no score");
     }
@@ -444,32 +431,15 @@ static void refresh_settings(void)
 /* ---- Top Scores ------------------------------------------------------------ */
 
 /* Five rows, and a sixth when the latest entry is further down than that
- * (with its true place). Classic: "1.  1,920 \xC2\xB7 L3 \xC2\xB7 loop 2 \xC2\xB7 3:12 left"
- * (score, level, which time round the 8 levels, time that was left). Lives:
- * "1.  12,345 \xC2\xB7 19 lvls \xC2\xB7 2 loops" (a whole run). "--" for an empty
- * place. The latest entry is gold; after a game over the page says so, and
+ * (with its true place). A row is a whole run: "1.  192,345 \xC2\xB7 19 lvls \xC2\xB7
+ * 2 loops \xC2\xB7 3 fails". "--" for an empty place. The latest entry is gold; after a game over the page says so, and
  * its button plays again. */
 #define NEW_ENTRY_COLOR 0xF2C14E
 
-static void fmt_entry(char *out, unsigned n, const char *place, score_entry_t e, bool lives)
+static void fmt_entry(char *out, unsigned n, const char *place, score_entry_t e)
 {
-    char body[48];
-    if (lives) {
-        scores_fmt_run(e, body, sizeof(body));
-    } else {
-        char num[16];
-        scores_fmt_thousands(e.score, num, sizeof(num));
-        const unsigned lv = (e.levels - 1u) % GAME_LEVELS + 1u;
-        const unsigned loop = (e.levels - 1u) / GAME_LEVELS + 1u;
-        int k = snprintf(body, sizeof(body), "%s \xC2\xB7 L%u", num, lv);
-        if (loop > 1 && k > 0 && (unsigned)k < sizeof(body)) {
-            k += snprintf(body + k, sizeof(body) - (unsigned)k, " \xC2\xB7 loop %u", loop);
-        }
-        if (k > 0 && (unsigned)k < sizeof(body)) {
-            snprintf(body + k, sizeof(body) - (unsigned)k, " \xC2\xB7 %u:%02u left",
-                     e.left_s / 60, e.left_s % 60);
-        }
-    }
+    char body[56];
+    scores_fmt_run(e, body, sizeof(body));
     snprintf(out, n, "%s  %s", place, body);
 }
 
@@ -504,7 +474,7 @@ static void refresh_scores(void)
         char buf[64], place[8];
         snprintf(place, sizeof(place), "%d.", i + 1);
         if (i < t->count) {
-            fmt_entry(buf, sizeof(buf), place, t->e[i], lives);
+            fmt_entry(buf, sizeof(buf), place, t->e[i]);
         } else {
             snprintf(buf, sizeof(buf), "%s  --", place);
         }
@@ -522,7 +492,7 @@ static void refresh_scores(void)
         } else {
             snprintf(place, sizeof(place), "%d.", rank + 1);
         }
-        fmt_entry(buf, sizeof(buf), place, latest, lives);
+        fmt_entry(buf, sizeof(buf), place, latest);
         ui_lv_set_text(objects.scores_row_6, buf);
         set_gold(objects.scores_row_6, true);
     }

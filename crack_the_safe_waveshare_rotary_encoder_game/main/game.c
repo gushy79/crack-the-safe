@@ -119,8 +119,9 @@ static unsigned start_round(game_t *g, uint32_t now_ms)
     if (g->mode != GAME_UNLOCKED) {
         /* Not carrying on from a win: a new run (a win continues it, round
          * the levels as many times as the player lasts). */
-        g->run_score = 0;
+        g->run_speed = 0;
         g->run_levels = 0;
+        g->run_fails = 0;
     }
     g->level = (uint8_t)game_next_level(g);
     /* A fresh game starts with full lives; a win carries what is left. */
@@ -155,8 +156,11 @@ void game_init(game_t *g, uint32_t seed)
 
 /* Game over. The red hold shows what went wrong; when it ends, game_tick()
  * starts a fresh game with the dial back at 0. */
-static unsigned fail(game_t *g, uint32_t now_ms)
+static unsigned fail(game_t *g, uint32_t now_ms, bool clock_out)
 {
+    if (!clock_out && g->run_fails < UINT16_MAX) {
+        g->run_fails++;
+    }
     g->on_target = false;
     g->hit_felt = false;
     g->finished_ms = now_ms;       /* freezes the clock display in the red */
@@ -175,7 +179,8 @@ static unsigned open_safe(game_t *g, uint32_t now_ms)
     g->stage = GAME_CODE_LEN;
     g->finished_ms = now_ms;
     set_mode(g, GAME_UNLOCKED, now_ms);
-    g->run_score += game_current_score(g, now_ms);
+    /* The share of this level's clock that was left. */
+    g->run_speed += game_time_left_ms(g, now_ms) * 10000u / game_level_ms(g->level);
     g->run_levels++;
     return GAME_EV_UNLOCKED;
 }
@@ -221,7 +226,7 @@ static unsigned step(game_t *g, int delta, uint32_t now_ms)
         if (g->on_target) {
             /* Kept going past the number instead of reversing on it. */
             g->timed_out = false;
-            return fail(g, now_ms);
+            return fail(g, now_ms, false);
         }
         if (g->travel < 255) {
             g->travel++;
@@ -253,7 +258,7 @@ static unsigned step(game_t *g, int delta, uint32_t now_ms)
     if (g->travel >= 2) {
         /* Committed to a direction, then turned back somewhere other than
          * the number. */
-        return fail(g, now_ms);
+        return fail(g, now_ms, false);
     }
     /* A detent or two of wobble before committing is forgiven. */
     if (g->travel > 0) {
@@ -386,7 +391,7 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
         return open_safe(g, now_ms);
     }
     if (g->mode == GAME_PLAY && game_timed(g) && game_time_left_ms(g, now_ms) == 0) {
-        const unsigned ev = fail(g, now_ms);
+        const unsigned ev = fail(g, now_ms, true);
         g->timed_out = true;
         g->lives = 0;              /* a spent clock cannot be retried */
         return ev | GAME_EV_TIMEOUT;
@@ -410,15 +415,29 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
         set_mode(g, GAME_PLAY, now_ms);
         return GAME_EV_RESUMED | GAME_EV_RETRY;
     }
-    if (g->mode == GAME_WRONG && g->rules == GAME_RULES_LIVES &&
+    if (g->mode == GAME_WRONG && game_run_over(g) &&
         now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
-        /* The run is over (the last life, or the clock): back
-         * to the title. The caller has the run's totals from the loss. */
+        /* The run is over: back to the title. The caller has the run's
+         * totals from the loss. */
         return game_reset(g, now_ms) | GAME_EV_OVER;
     }
+    if (g->mode == GAME_WRONG && g->rules == GAME_RULES_CLASSIC &&
+        now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
+        /* A miss: fresh numbers dealt from the dial at 0 and the run goes on.
+         * The clock kept its value through the red hold, so the hold costs no
+         * time and the clock is now what ends the run. */
+        g->ticks = 0;
+        g->speed_dps = 0;
+        g->timed_out = false;
+        g->attempts++;
+        g->started_ms += now_ms - g->finished_ms;
+        g->finished_ms = 0;
+        deal(g, now_ms);
+        set_mode(g, GAME_PLAY, now_ms);
+        return GAME_EV_RESUMED | GAME_EV_STARTED;
+    }
     if (g->mode == GAME_WRONG && now_ms - g->mode_since_ms >= game_wrong_hold_ms(g)) {
-        /* Classic and Zen: a new game: dial back to 0, fresh numbers dealt from there, the
-         * attempt count and the clock restarted. */
+        /* Zen: a new code: dial back to 0, fresh numbers dealt from there. */
         g->ticks = 0;
         g->speed_dps = 0;
         return start_round(g, now_ms) | GAME_EV_RESUMED;
@@ -426,23 +445,33 @@ unsigned game_tick(game_t *g, uint32_t now_ms)
     return GAME_EV_NONE;
 }
 
-uint32_t game_score(int level, uint32_t time_left_ms)
+uint32_t game_run_score(const game_t *g)
 {
-    if (level < 1) {
-        level = 1;
-    }
-    if (level > GAME_LEVELS) {
-        level = GAME_LEVELS;
-    }
-    return (uint32_t)level * (time_left_ms / 100u);
-}
-
-uint32_t game_current_score(const game_t *g, uint32_t now_ms)
-{
-    if (g->mode != GAME_UNLOCKED || g->rules == GAME_RULES_ZEN) {
+    if (g->rules == GAME_RULES_ZEN || g->run_levels == 0) {
         return 0;
     }
-    return game_score(g->level, game_time_left_ms(g, now_ms));
+    uint32_t speed = g->run_speed / g->run_levels;       /* 0..10000 */
+    if (speed > GAME_RUN_SAFE_POINTS - 1) {
+        speed = GAME_RUN_SAFE_POINTS - 1;                /* never reaches a safe's worth */
+    }
+    if (g->rules == GAME_RULES_LIVES) {
+        for (unsigned n = 0; n < g->run_fails && n < 100; n++) {
+            speed = speed * GAME_FAIL_KEEP_PCT / 100u;
+        }
+    }
+    return (uint32_t)g->run_levels * GAME_RUN_SAFE_POINTS + speed;
+}
+
+bool game_run_over(const game_t *g)
+{
+    if (g->mode != GAME_WRONG) {
+        return false;
+    }
+    switch (g->rules) {
+    case GAME_RULES_LIVES:   return g->lives == 0;
+    case GAME_RULES_CLASSIC: return g->timed_out;
+    default:                 return false;
+    }
 }
 
 uint32_t game_elapsed_s(const game_t *g, uint32_t now_ms)
