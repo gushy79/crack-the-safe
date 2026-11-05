@@ -166,6 +166,11 @@ it whenever you like and export again. Never edit files in it by hand; the next
 export overwrites them. With `main/ui/` missing, the firmware still builds, as
 a placeholder that asks for an export.
 
+The export writes every image uncompressed. After each export run
+`tools/compress_images.py` (setup is in its docstring) to LZ4-compress them again;
+it halves the app and the door animation does not notice. Without it the app is
+~7.2 MB of an 8 MB slot.
+
 The hand-written C that the screens call lives beside it in `main/`:
 
 | File | What it does |

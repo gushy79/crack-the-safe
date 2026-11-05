@@ -57,3 +57,12 @@ CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
+
+# Compressed images (tools/compress_images.py): the LZ4 decoder, whole-image
+# decode to RAM (without it they silently fail to draw), and an image cache so
+# a frame is decoded once, not once per 24-line strip. The cache lives in PSRAM
+# (lv_malloc is the ESP heap) and holds the door frame, prize and glow on screen.
+CONFIG_LV_USE_LZ4=y
+CONFIG_LV_USE_LZ4_INTERNAL=y
+CONFIG_LV_BIN_DECODER_RAM_LOAD=y
+CONFIG_LV_CACHE_DEF_SIZE=2097152
