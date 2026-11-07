@@ -39,7 +39,7 @@ endif()
 if(UI_CORE)
     set(APP_HAVE_UI 1)
     set(APP_SRCS "game.c" "scores.c" "score_store.c" "settings.c" "app.c" "ui_game.c"
-                 "actions.c" "bt_link.c" "sound.c" "sfx.c")
+                 "actions.c" "bt_link.c" "sound.c" "sfx.c" "wifi_link.c")
     # Only registered when present: ESP-IDF rejects an include directory that
     # does not exist, which would break the build the moment main/ui/ is
     # deleted.
@@ -69,6 +69,10 @@ idf_component_register(
         esp_hw_support
         mbedtls
         nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE APP_HAVE_UI=${APP_HAVE_UI})

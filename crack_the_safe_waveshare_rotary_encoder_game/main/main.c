@@ -19,6 +19,7 @@
 
 #include "esp_log.h"
 #include "esp_random.h"
+#include "wifi_link.h"
 #include "nvs_flash.h"
 
 #include "knob_board.h"
@@ -69,6 +70,7 @@ void app_main(void)
     ESP_ERROR_CHECK(err);
 
     ESP_ERROR_CHECK(knob_board_init());
+    wifi_link_init();
 
     if (knob_board_lock(0)) {
 #if APP_HAVE_UI
