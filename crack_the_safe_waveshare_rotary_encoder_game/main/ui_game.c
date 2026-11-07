@@ -22,6 +22,7 @@
 #include "screens.h"
 #include "settings.h"
 #include "sound.h"
+#include "wifi_link.h"
 #include "ui_lv.h"
 
 static const lv_state_t DONE  = LV_STATE_CHECKED;
@@ -428,6 +429,75 @@ static void refresh_settings(void)
     ui_lv_set_state_in(objects.settings_hap_up_icon, WRONG, h_max);
 }
 
+/* ---- Wi-Fi ---------------------------------------------------------------------- */
+
+/* The Settings row's value, and the setup page: a QR code that joins the board's
+ * hotspot (the phone then opens its page), then what is happening. The QR is
+ * made on first use and updated only when its text changes. */
+static lv_obj_t *s_qr;
+
+static void refresh_wifi(void)
+{
+    const wifi_link_state_t st = wifi_link_state();
+    const bool time_ok = wifi_link_time_valid();
+    ui_lv_set_text(objects.settings_wifi_value,
+                   st == WIFI_LINK_PROVISIONING || st == WIFI_LINK_STARTING ? "Setting up" :
+                   st == WIFI_LINK_CONNECTING   ? "Connecting" :
+                   st == WIFI_LINK_FAILED       ? "Can't connect" :
+                   time_ok                      ? "Time set" :
+                   wifi_link_has_network()      ? "Saved" : "Not set up");
+
+    const bool setup = st == WIFI_LINK_PROVISIONING && !wifi_link_provision_done();
+    if (setup && !s_qr) {
+        s_qr = lv_qrcode_create(objects.page_wifi);
+        lv_qrcode_set_size(s_qr, 116);
+        lv_qrcode_set_dark_color(s_qr, lv_color_black());
+        lv_qrcode_set_light_color(s_qr, lv_color_white());
+        lv_obj_set_style_border_color(s_qr, lv_color_white(), 0);   /* the quiet zone */
+        lv_obj_set_style_border_width(s_qr, 4, 0);
+        lv_obj_set_pos(s_qr, 118, 84);
+    }
+    if (s_qr) {
+        ui_lv_set_hidden(s_qr, !setup);
+    }
+    if (setup) {
+        char ssid[33], pass[12], text[80];
+        static char s_last[80];
+        wifi_link_provision_info(ssid, sizeof(ssid), pass, sizeof(pass));
+        if (wifi_link_provision_clients() > 0) {      /* a phone is on: now the page */
+            snprintf(text, sizeof(text), "http://192.168.4.1/");
+        } else {
+            snprintf(text, sizeof(text), "WIFI:T:WPA;S:%s;P:%s;;", ssid, pass);
+        }
+        if (strcmp(text, s_last)) {
+            lv_qrcode_update(s_qr, text, (uint32_t)strlen(text));
+            snprintf(s_last, sizeof(s_last), "%s", text);
+        }
+    }
+
+    char buf[80];
+    const char *msg;
+    if (st == WIFI_LINK_STARTING) {
+        msg = "Starting Wi-Fi...";
+    } else if (setup && wifi_link_provision_clients() > 0) {
+        msg = "Connected. Scan again to\nopen the setup page";
+    } else if (setup) {
+        msg = "Scan with your phone\nto join the safe's Wi-Fi";
+    } else if (st == WIFI_LINK_PROVISIONING || st == WIFI_LINK_CONNECTING) {
+        snprintf(buf, sizeof(buf), "Joining %s...", wifi_link_saved_ssid());
+        msg = buf;
+    } else if (st == WIFI_LINK_FAILED) {
+        msg = "Couldn't join.\nCheck the password.";
+    } else if (time_ok) {
+        msg = "Connected.\nThe clock is set.";
+    } else {
+        msg = "Not connected.";
+    }
+    ui_lv_set_text(objects.wifi_status, msg);
+    ui_lv_set_text(objects.wifi_back_text,
+                   setup || st == WIFI_LINK_STARTING ? "Cancel" : "Done");
+}
+
 /* ---- Top Scores ------------------------------------------------------------ */
 
 /* Five rows, and a sixth when the latest entry is further down than that
@@ -504,6 +574,7 @@ void ui_game_refresh(void)
     refresh_play();
     refresh_unlocked();
     refresh_headphones();
+    refresh_wifi();
     refresh_settings();
     refresh_scores();
 }

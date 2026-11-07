@@ -70,3 +70,6 @@ CONFIG_LV_CACHE_DEF_SIZE=2097152
 # Wi-Fi (wifi_link.c): the radio's buffers go to PSRAM rather than the small
 # internal RAM the display's DMA buffers need.
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# The Wi-Fi setup page's QR code (joins the board's hotspot).
+CONFIG_LV_USE_QRCODE=y

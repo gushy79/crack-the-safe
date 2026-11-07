@@ -19,6 +19,9 @@
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "nvs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "lwip/sockets.h"
 
 static const char *TAG = "wifi";
 
@@ -38,6 +41,10 @@ static esp_timer_handle_t s_stop_timer, s_retry_timer, s_prov_timer;
 static int s_retries;
 static volatile bool s_prov_done;
 static bool s_sntp_started;
+static volatile bool s_cancel;           /* provision_stop() while still STARTING */
+static volatile int s_clients;
+static volatile bool s_scanning, s_dns_run;
+static TaskHandle_t s_dns_task, s_prov_task;
 
 static char s_ssid[33], s_pass[65];      /* the saved network */
 static int s_tz_min;
@@ -181,6 +188,12 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
                 fail("could not join the network");
             }
         }
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STACONNECTED) {
+        s_clients++;
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STADISCONNECTED) {
+        if (s_clients > 0) {
+            s_clients--;
+        }
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ESP_LOGI(TAG, "joined; asking %s for the time", NTP_SERVER);
         if (!s_sntp_started) {
@@ -217,15 +230,21 @@ static void connect_saved(void)
 
 static void scan_now(void)
 {
+    if (s_scanning) {
+        return;
+    }
+    s_scanning = true;
     s_scan_n = 0;
     wifi_scan_config_t sc = { 0 };
     if (esp_wifi_scan_start(&sc, true) != ESP_OK) {
+        s_scanning = false;
         return;
     }
     uint16_t n = SCAN_MAX;
     if (esp_wifi_scan_get_ap_records(&n, s_scan) == ESP_OK) {
         s_scan_n = n;                     /* sorted strongest first by the driver */
     }
+    s_scanning = false;
 }
 
 static void html_escape(httpd_req_t *r, const char *s)
@@ -349,6 +368,7 @@ static esp_err_t any_get(httpd_req_t *r, httpd_err_code_t err)
     return httpd_resp_send(r, NULL, 0);
 }
 
+static void http_stop(void);
 static bool http_start(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
@@ -380,59 +400,179 @@ static void http_stop(void)
 
 /* ---- Public ------------------------------------------------------------------ */
 
+/* A DNS server that answers every name with the board's own address. That is what
+ * makes a phone treat the hotspot as a "sign in to this network" portal: it asks for
+ * its connectivity-check address, lands on our page, and sends the browser over this
+ * network instead of falling back to mobile data. */
+static void dns_task(void *arg)
+{
+    const int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    struct sockaddr_in me = { .sin_family = AF_INET, .sin_port = htons(53),
+                              .sin_addr.s_addr = htonl(INADDR_ANY) };
+    struct timeval tmo = { .tv_sec = 0, .tv_usec = 500 * 1000 };
+    if (sock >= 0) {
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tmo, sizeof(tmo));
+    }
+    if (sock >= 0 && bind(sock, (struct sockaddr *)&me, sizeof(me)) == 0) {
+        uint8_t q[256];
+        while (s_dns_run) {
+            struct sockaddr_in from;
+            socklen_t fl = sizeof(from);
+            const int n = recvfrom(sock, q, sizeof(q) - 16, 0, (struct sockaddr *)&from, &fl);
+            if (n < 12 || (q[2] & 0x80)) {
+                continue;                              /* timeout, runt, or not a query */
+            }
+            int i = 12;                                /* end of the question's name */
+            while (i < n && q[i]) {
+                i += q[i] + 1;
+            }
+            i += 5;                                    /* the 0, then type and class */
+            if (i > n) {
+                continue;
+            }
+            const bool is_a = q[i - 4] == 0 && q[i - 3] == 1;
+            q[2] = 0x81; q[3] = 0x80;                  /* a response, recursion available */
+            q[6] = 0; q[7] = is_a ? 1 : 0;             /* answers: none for AAAA etc. */
+            q[8] = q[9] = q[10] = q[11] = 0;
+            int len = i;
+            if (is_a) {
+                static const uint8_t ans[] = { 0xC0, 0x0C, 0, 1, 0, 1, 0, 0, 0, 60, 0, 4,
+                                               192, 168, 4, 1 };
+                memcpy(q + len, ans, sizeof(ans));
+                len += sizeof(ans);
+            }
+            sendto(sock, q, len, 0, (struct sockaddr *)&from, fl);
+        }
+    }
+    if (sock >= 0) {
+        close(sock);
+    }
+    s_dns_task = NULL;
+    vTaskDelete(NULL);
+}
+
+static void dns_stop(void)
+{
+    s_dns_run = false;
+    for (int i = 0; i < 20 && s_dns_task; i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+/* The hotspot's DHCP: hand out our address as the DNS server, and as the
+ * captive-portal address (DHCP option 114, which newer Android reads). */
+static void dhcp_portal_options(void)
+{
+    esp_netif_ip_info_t ip;
+    esp_netif_get_ip_info(s_ap, &ip);
+    esp_netif_dns_info_t dns = { 0 };
+    dns.ip.type = IPADDR_TYPE_V4;
+    dns.ip.u_addr.ip4.addr = ip.ip.addr;
+    uint8_t offer_dns = 0x02;                          /* OFFER_DNS */
+    static const char uri[] = "http://192.168.4.1/";
+    esp_netif_dhcps_stop(s_ap);
+    esp_netif_dhcps_option(s_ap, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER, &offer_dns, 1);
+    esp_netif_set_dns_info(s_ap, ESP_NETIF_DNS_MAIN, &dns);
+    esp_netif_dhcps_option(s_ap, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI,
+                           (void *)uri, sizeof(uri) - 1);
+    esp_netif_dhcps_start(s_ap);
+}
+
+static void hotspot_down(void)
+{
+    dns_stop();
+    http_stop();
+    s_clients = 0;
+}
+
+/* Bring the hotspot up: the radio, the page, the DNS. Runs in its own task, so the
+ * screen can say "starting" instead of freezing for a few seconds. */
+static void prov_task(void *arg)
+{
+    bool ok = ensure_wifi();
+    if (ok) {
+        esp_wifi_stop();
+        static const char alphabet[] = "abcdefghjkmnpqrstuvwxyz23456789";   /* no look-alikes */
+        for (int i = 0; i < 8; i++) {
+            s_ap_pass[i] = alphabet[esp_random() % (sizeof(alphabet) - 1)];
+        }
+        s_ap_pass[8] = 0;
+        uint8_t mac[6] = { 0 };
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        snprintf(s_ap_ssid, sizeof(s_ap_ssid), "CrackTheSafe-%02X%02X", mac[4], mac[5]);
+
+        wifi_config_t ap = { 0 };
+        put(ap.ap.ssid, sizeof(ap.ap.ssid), s_ap_ssid);
+        put(ap.ap.password, sizeof(ap.ap.password), s_ap_pass);
+        ap.ap.ssid_len = (uint8_t)strlen(s_ap_ssid);
+        ap.ap.channel = 1;
+        ap.ap.max_connection = 2;
+        ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
+        esp_wifi_set_mode(WIFI_MODE_APSTA);
+        esp_wifi_set_config(WIFI_IF_AP, &ap);
+        ok = esp_wifi_start() == ESP_OK;
+    }
+    if (ok) {
+        dhcp_portal_options();
+        s_dns_run = true;
+        ok = xTaskCreate(dns_task, "wifi_dns", 3072, NULL, 4, &s_dns_task) == pdPASS && http_start();
+    }
+    if (!ok || s_cancel) {
+        hotspot_down();
+        radio_off();
+        s_state = ok ? WIFI_LINK_IDLE : WIFI_LINK_FAILED;
+        s_prov_task = NULL;
+        vTaskDelete(NULL);
+    }
+    s_state = WIFI_LINK_PROVISIONING;
+    ESP_LOGI(TAG, "setup hotspot %s up", s_ap_ssid);
+    scan_now();                            /* the page fills in when this is done */
+    ESP_LOGI(TAG, "%u networks seen", (unsigned)s_scan_n);
+    s_prov_task = NULL;
+    vTaskDelete(NULL);
+}
+
 bool wifi_link_provision_start(void)
 {
+    if (s_state == WIFI_LINK_STARTING) {
+        s_cancel = false;                  /* opened again before it finished */
+        return true;
+    }
     if (s_state == WIFI_LINK_PROVISIONING) {
         return true;
     }
-    if (!ensure_wifi()) {
-        return false;
-    }
-    esp_wifi_stop();
-    static const char alphabet[] = "abcdefghjkmnpqrstuvwxyz23456789";   /* no look-alikes */
-    for (int i = 0; i < 8; i++) {
-        s_ap_pass[i] = alphabet[esp_random() % (sizeof(alphabet) - 1)];
-    }
-    s_ap_pass[8] = 0;
-    uint8_t mac[6] = { 0 };
-    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-    snprintf(s_ap_ssid, sizeof(s_ap_ssid), "CrackTheSafe-%02X%02X", mac[4], mac[5]);
-
-    wifi_config_t ap = { 0 };
-    put(ap.ap.ssid, sizeof(ap.ap.ssid), s_ap_ssid);
-    put(ap.ap.password, sizeof(ap.ap.password), s_ap_pass);
-    ap.ap.ssid_len = (uint8_t)strlen(s_ap_ssid);
-    ap.ap.channel = 1;
-    ap.ap.max_connection = 2;
-    ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    s_cancel = false;
     s_prov_done = false;
-    esp_wifi_set_mode(WIFI_MODE_APSTA);
-    esp_wifi_set_config(WIFI_IF_AP, &ap);
-    if (esp_wifi_start() != ESP_OK) {
+    s_clients = 0;
+    s_state = WIFI_LINK_STARTING;
+    if (xTaskCreate(prov_task, "wifi_prov", 6144, NULL, 4, &s_prov_task) != pdPASS) {
+        s_state = WIFI_LINK_FAILED;
         return false;
     }
-    scan_now();
-    if (!http_start()) {
-        esp_wifi_stop();
-        return false;
-    }
-    s_state = WIFI_LINK_PROVISIONING;
-    ESP_LOGI(TAG, "setup hotspot %s up, %u networks seen", s_ap_ssid, (unsigned)s_scan_n);
     return true;
 }
 
 void wifi_link_provision_stop(void)
 {
+    if (s_state == WIFI_LINK_STARTING) {
+        s_cancel = true;                   /* the task tidies up when it gets there */
+        return;
+    }
     if (s_state != WIFI_LINK_PROVISIONING) {
         return;
     }
-    http_stop();
+    hotspot_down();
     s_state = WIFI_LINK_IDLE;
     if (s_prov_done) {
         connect_saved();                   /* the phone chose a network: join it now */
     } else {
         radio_off();
     }
+}
+
+int wifi_link_provision_clients(void)
+{
+    return s_clients;
 }
 
 void wifi_link_provision_info(char *ssid, size_t ssid_len, char *pass, size_t pass_len)

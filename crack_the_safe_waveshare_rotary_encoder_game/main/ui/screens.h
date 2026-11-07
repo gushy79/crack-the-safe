@@ -20,7 +20,8 @@ enum ScreensEnum {
     SCREEN_ID_PAGE_UNLOCKED = 7,
     SCREEN_ID_PAGE_SCORES = 8,
     SCREEN_ID_PAGE_MODES = 9,
-    _SCREEN_ID_LAST = 9
+    SCREEN_ID_PAGE_WIFI = 10,
+    _SCREEN_ID_LAST = 10
 };
 
 typedef struct _objects_t {
@@ -33,6 +34,7 @@ typedef struct _objects_t {
     lv_obj_t *page_unlocked;
     lv_obj_t *page_scores;
     lv_obj_t *page_modes;
+    lv_obj_t *page_wifi;
     lv_obj_t *title_ring;
     lv_obj_t *title_bolts;
     lv_obj_t *title_bolt_slots;
@@ -65,6 +67,10 @@ typedef struct _objects_t {
     lv_obj_t *settings_hp_icon;
     lv_obj_t *settings_hp_text;
     lv_obj_t *settings_hp_value;
+    lv_obj_t *settings_wifi;
+    lv_obj_t *settings_wifi_icon;
+    lv_obj_t *settings_wifi_text;
+    lv_obj_t *settings_wifi_value;
     lv_obj_t *settings_vol;
     lv_obj_t *settings_vol_icon;
     lv_obj_t *settings_vol_text;
@@ -194,6 +200,10 @@ typedef struct _objects_t {
     lv_obj_t *modes_zen_text;
     lv_obj_t *modes_back;
     lv_obj_t *modes_back_text;
+    lv_obj_t *wifi_title;
+    lv_obj_t *wifi_status;
+    lv_obj_t *wifi_back;
+    lv_obj_t *wifi_back_text;
 } objects_t;
 
 extern objects_t objects;
@@ -224,6 +234,9 @@ void tick_screen_page_scores();
 
 void create_screen_page_modes();
 void tick_screen_page_modes();
+
+void create_screen_page_wifi();
+void tick_screen_page_wifi();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

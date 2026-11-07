@@ -21,6 +21,7 @@
 typedef enum {
     WIFI_LINK_IDLE,          /* radio off (maybe with a saved network, maybe not) */
     WIFI_LINK_CONNECTING,    /* joining the saved network / waiting for the time */
+    WIFI_LINK_STARTING,      /* the setup hotspot is being brought up (a second or two) */
     WIFI_LINK_PROVISIONING,  /* the setup hotspot and page are up */
     WIFI_LINK_FAILED,        /* the last attempt to join or get the time failed */
 } wifi_link_state_t;
@@ -34,12 +35,15 @@ wifi_link_state_t wifi_link_state(void);
 bool wifi_link_has_network(void);
 const char *wifi_link_saved_ssid(void);
 
-/** Start the setup hotspot and page. False if the radio could not start. */
+/** Start the setup hotspot and page. Returns at once (state STARTING, then
+ *  PROVISIONING, or FAILED if the radio would not start). */
 bool wifi_link_provision_start(void);
 /** Stop it again (back to IDLE, or onwards to CONNECTING if a network was just saved). */
 void wifi_link_provision_stop(void);
 /** What a phone needs to join the hotspot: its name and passphrase. */
 void wifi_link_provision_info(char *ssid, size_t ssid_len, char *pass, size_t pass_len);
+/** Phones joined to the hotspot right now (the screen then shows the page's address). */
+int wifi_link_provision_clients(void);
 /** A network was chosen on the phone since provisioning started (it is now joining). */
 bool wifi_link_provision_done(void);
 

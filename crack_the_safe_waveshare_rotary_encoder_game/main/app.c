@@ -20,6 +20,7 @@
 #include "sound.h"
 #include "ui.h"
 #include "ui_game.h"
+#include "wifi_link.h"
 
 static const char *TAG = "safe";
 
@@ -177,7 +178,7 @@ int app_door_frame_at(uint32_t t)
  * of whatever the game is showing. While anything is on it the game is paused:
  * no turns, taps or ticks reach it and its clock is stopped. */
 
-typedef enum { OVER_MENU, OVER_SETTINGS, OVER_HEADPHONES, OVER_SCORES, OVER_MODES } over_t;
+typedef enum { OVER_MENU, OVER_SETTINGS, OVER_HEADPHONES, OVER_SCORES, OVER_MODES, OVER_WIFI } over_t;
 
 #define OVER_MAX 3
 static over_t s_over[OVER_MAX];
@@ -198,6 +199,7 @@ static void show_screen_for_mode(void)
         case OVER_SETTINGS: want = SCREEN_ID_PAGE_SETTINGS;   break;
         case OVER_SCORES:   want = SCREEN_ID_PAGE_SCORES;     break;
         case OVER_MODES:    want = SCREEN_ID_PAGE_MODES;      break;
+        case OVER_WIFI:     want = SCREEN_ID_PAGE_WIFI;       break;
         default:            want = SCREEN_ID_PAGE_HEADPHONES; break;
         }
     } else {
@@ -250,6 +252,9 @@ static void over_pop(void)
             bt_link_stop_search();
         }
         ui_game_headphones_info(false);
+    }
+    if (over_is(OVER_WIFI)) {
+        wifi_link_provision_stop();         /* hotspot off; joins the network if one was chosen */
     }
     if (--s_depth == 0) {
         game_resume(&g_game, app_now_ms());
@@ -420,6 +425,13 @@ void app_modes_pick(game_rules_t rules)
 void app_menu_settings(void)
 {
     over_push(OVER_SETTINGS);
+    ui_game_refresh();
+}
+
+void app_settings_wifi(void)
+{
+    wifi_link_provision_start();            /* the hotspot and its page; the screen shows the QR */
+    over_push(OVER_WIFI);
     ui_game_refresh();
 }
 

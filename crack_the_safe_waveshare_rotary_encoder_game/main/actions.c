@@ -10,6 +10,7 @@
  * Modes*: the Modes page's Classic, Lives, Zen and Back.
  * Menu*, Settings*, Scores*: the menu's, the Settings screen's (the volume's
  *        - and + among them) and the Top Scores screen's buttons.
+ * SettingsWifi, WifiBack: the Wi-Fi row and its setup page's button.
  * Headphones*: the Bluetooth pairing screen. HeadphonesSelect carries the
  *        list row in userData.
  */
@@ -57,6 +58,18 @@ void action_menu_scores(lv_event_t *e)
 }
 
 void action_menu_back(lv_event_t *e)
+{
+    (void)e;
+    app_back();
+}
+
+void action_settings_wifi(lv_event_t *e)
+{
+    (void)e;
+    app_settings_wifi();
+}
+
+void action_wifi_back(lv_event_t *e)
 {
     (void)e;
     app_back();

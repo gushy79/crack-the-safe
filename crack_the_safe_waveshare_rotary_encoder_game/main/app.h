@@ -38,6 +38,8 @@ void app_new_game(game_rules_t rules);
 /** A choice on the Modes page: remembered, then a new game under it. */
 void app_modes_pick(game_rules_t rules);
 void app_menu_settings(void);
+/** Settings' Wi-Fi row: the phone-driven setup page. */
+void app_settings_wifi(void);
 /** The Top-5 Scores page (the knob flips between the Classic and Lives tables). */
 void app_menu_scores(void);
 /** Back out of the menu, Settings or Headphones, one screen at a time. */
