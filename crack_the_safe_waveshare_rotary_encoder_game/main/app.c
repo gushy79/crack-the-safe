@@ -98,6 +98,13 @@ static void note_entry(int mode, score_entry_t e)
     }
 }
 
+/* When a run ended, as local seconds since 1970 (0 until the clock has been set). */
+static uint32_t run_when(void)
+{
+    const uint32_t utc = wifi_link_unix_time();
+    return utc ? (uint32_t)((int64_t)utc + (int64_t)wifi_link_tz_minutes() * 60) : 0;
+}
+
 /* The run is over (or given up): score it and, if it makes the table, save
  * it. Zen runs are not scored. */
 static void record_run(void)
@@ -107,6 +114,7 @@ static void record_run(void)
     }
     note_entry(score_mode(), (score_entry_t){
         .score  = game_run_score(&g_game),
+        .when   = run_when(),
         .levels = g_game.run_levels,
         .fails  = g_game.run_fails,
     });
@@ -253,6 +261,9 @@ static void over_pop(void)
         }
         ui_game_headphones_info(false);
     }
+    if (over_is(OVER_SCORES)) {
+        ui_game_score_detail(-1);
+    }
     if (over_is(OVER_WIFI)) {
         wifi_link_provision_stop();         /* hotspot off; joins the network if one was chosen */
     }
@@ -350,6 +361,7 @@ void app_rotate(int detents)
         } else if (over_is(OVER_SETTINGS)) {
             app_volume_step(detents);        /* the knob turns the volume */
         } else if (over_is(OVER_SCORES) && !s_game_over) {
+            ui_game_score_detail(-1);
             s_scores_view = (s_scores_view + 1) % SCORE_MODES;   /* the other table */
             ui_game_refresh();
         }
@@ -425,6 +437,12 @@ void app_modes_pick(game_rules_t rules)
 void app_menu_settings(void)
 {
     over_push(OVER_SETTINGS);
+    ui_game_refresh();
+}
+
+void app_scores_row(int row)
+{
+    ui_game_score_detail(row);
     ui_game_refresh();
 }
 

@@ -112,3 +112,61 @@ void scores_fmt_run(score_entry_t e, bool show_fails, char *out, unsigned out_le
                  e.fails == 1 ? "fail" : "fails");
     }
 }
+
+/* The first table layout: a 4-byte header (count, padding) and 8-byte entries. */
+typedef struct {
+    uint32_t score;
+    uint16_t levels;
+    uint16_t fails;
+} v1_entry_t;
+
+typedef struct {
+    uint16_t   count;
+    v1_entry_t e[SCORES_MAX];
+} v1_table_t;
+
+bool scores_from_v1(const void *blob, unsigned len, score_table_t *out)
+{
+    if (len != sizeof(v1_table_t)) {
+        return false;
+    }
+    const v1_table_t *old = blob;
+    if (old->count > SCORES_MAX) {
+        return false;
+    }
+    scores_clear(out);
+    out->count = old->count;
+    for (int i = 0; i < old->count; i++) {
+        out->e[i] = (score_entry_t){ .score = old->e[i].score, .when = 0,
+                                     .levels = old->e[i].levels, .fails = old->e[i].fails };
+    }
+    return scores_valid(out);
+}
+
+void scores_fmt_when(uint32_t when, char *out, unsigned out_len)
+{
+    if (out_len == 0) {
+        return;
+    }
+    if (when == 0) {
+        snprintf(out, out_len, "Date not recorded");
+        return;
+    }
+    static const char *const days[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    static const char *const months[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    const uint32_t days_since = when / 86400;
+    const uint32_t secs = when % 86400;
+    /* Days since 1970-01-01 to a calendar date (Howard Hinnant's civil_from_days). */
+    const int64_t z = (int64_t)days_since + 719468;
+    const int64_t era = z / 146097;
+    const int64_t doe = z - era * 146097;
+    const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const int64_t mp = (5 * doy + 2) / 153;
+    const int day = (int)(doy - (153 * mp + 2) / 5 + 1);
+    const int month = (int)(mp < 10 ? mp + 3 : mp - 9);
+    const int year = (int)(yoe + era * 400 + (month <= 2));
+    snprintf(out, out_len, "%s %d %s %d, %02u:%02u", days[(days_since + 4) % 7], day,
+             months[month - 1], year, (unsigned)(secs / 3600), (unsigned)(secs / 60 % 60));
+}

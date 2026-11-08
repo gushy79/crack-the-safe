@@ -260,6 +260,45 @@ static void test_thousands_truncates_safely(void)
     scores_fmt_thousands(5, b, 0);                  /* must not write at all */
 }
 
+static void test_when_text(void)
+{
+    char b[40];
+    scores_fmt_when(0, b, sizeof b);
+    CHECK(strcmp(b, "Date not recorded") == 0);
+    scores_fmt_when(1700000000, b, sizeof b);              /* 2023-11-14 22:13:20 UTC */
+    CHECK(strcmp(b, "Tue 14 Nov 2023, 22:13") == 0);
+    scores_fmt_when(1709164800 + 3600 * 9 + 60 * 5, b, sizeof b);   /* 2024-02-29: a leap day */
+    CHECK(strcmp(b, "Thu 29 Feb 2024, 09:05") == 0);
+    scores_fmt_when(1735689599, b, sizeof b);              /* 2024-12-31 23:59:59 */
+    CHECK(strcmp(b, "Tue 31 Dec 2024, 23:59") == 0);
+    scores_fmt_when(1735689600, b, sizeof b);              /* and a second later */
+    CHECK(strcmp(b, "Wed 1 Jan 2025, 00:00") == 0);
+    for (unsigned n = 1; n < 30; n++) {                    /* any size: terminated */
+        memset(b, 'x', sizeof b);
+        scores_fmt_when(1700000000, b, n);
+        CHECK(strlen(b) < n);
+    }
+}
+
+static void test_older_table_is_converted(void)
+{
+    /* The layout before dates: count (+ padding) then 8-byte entries. */
+    struct { uint16_t count; struct { uint32_t score; uint16_t levels, fails; } e[SCORES_MAX]; } old;
+    memset(&old, 0, sizeof old);
+    old.count = 2;
+    old.e[0].score = GAME_RUN_SAFE_POINTS * 3 + 500; old.e[0].levels = 3; old.e[0].fails = 2;
+    old.e[1].score = GAME_RUN_SAFE_POINTS + 10;      old.e[1].levels = 1;
+    score_table_t t;
+    CHECK(scores_from_v1(&old, sizeof old, &t));
+    CHECK(t.count == 2 && t.e[0].levels == 3 && t.e[0].fails == 2 && t.e[0].when == 0);
+    CHECK(t.e[1].score == GAME_RUN_SAFE_POINTS + 10);
+    CHECK(scores_valid(&t));
+    CHECK(!scores_from_v1(&old, sizeof old - 8, &t));      /* not that layout */
+    CHECK(!scores_from_v1(&old, sizeof t, &t));
+    old.e[0].levels = 9;                                   /* score disagrees with safes */
+    CHECK(!scores_from_v1(&old, sizeof old, &t));
+}
+
 int main(void)
 {
     RUN(test_empty_table);
@@ -275,6 +314,8 @@ int main(void)
     RUN(test_valid_rejects_corrupt_tables);
     RUN(test_valid_rejects_implausible_entries);
     RUN(test_run_text);
+    RUN(test_when_text);
+    RUN(test_older_table_is_converted);
     RUN(test_thousands_separators);
     RUN(test_thousands_truncates_safely);
 

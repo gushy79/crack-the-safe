@@ -444,8 +444,14 @@ static void refresh_wifi(void)
                    st == WIFI_LINK_PROVISIONING || st == WIFI_LINK_STARTING ? "Setting up" :
                    st == WIFI_LINK_CONNECTING   ? "Connecting" :
                    st == WIFI_LINK_FAILED       ? "Can't connect" :
-                   time_ok                      ? "Time set" :
-                   wifi_link_has_network()      ? "Saved" : "Not set up");
+                   time_ok                      ? wifi_link_saved_ssid() :   /* joined at boot */
+                   wifi_link_has_network()      ? "Not connected" : "Not set up");
+    /* The play page's symbol beside the battery: only once a network is saved, and
+     * lit while the clock has been set from it this boot. */
+    ui_lv_set_hidden(objects.play_wifi_icon, !wifi_link_has_network());
+    /* With the symbol showing, the pair is centred: the battery steps left to make room. */
+    lv_obj_set_x(objects.battery_icon, wifi_link_has_network() ? 146 : 160);
+    ui_lv_set_state_in(objects.play_wifi_icon, LV_STATE_CHECKED, time_ok ? LV_STATE_CHECKED : 0);
 
     const bool setup = st == WIFI_LINK_PROVISIONING && !wifi_link_provision_done();
     if (setup && !s_qr) {
@@ -523,6 +529,13 @@ static void set_gold(lv_obj_t *row, bool gold)
     }
 }
 
+static int s_detail = -1;       /* the Scores row whose detail is open, or -1 */
+
+void ui_game_score_detail(int row)
+{
+    s_detail = row;
+}
+
 static void refresh_scores(void)
 {
     lv_obj_t *const rows[SCORES_SHOWN] = {
@@ -566,6 +579,46 @@ static void refresh_scores(void)
         fmt_entry(buf, sizeof(buf), place, latest, lives);
         ui_lv_set_text(objects.scores_row_6, buf);
         set_gold(objects.scores_row_6, true);
+    }
+
+    /* A row's detail panel. */
+    score_entry_t pick = { 0 };
+    char place[12] = "";
+    if (s_detail >= 0 && s_detail < SCORES_SHOWN && s_detail < t->count) {
+        pick = t->e[s_detail];
+        snprintf(place, sizeof(place), "%d", s_detail + 1);
+    } else if (s_detail == SCORES_SHOWN && extra) {
+        pick = latest;
+        if (rank < 0) {
+            snprintf(place, sizeof(place), ">%d", SCORES_MAX);
+        } else {
+            snprintf(place, sizeof(place), "%d", rank + 1);
+        }
+    }
+    const bool detail = pick.score != 0;
+    if (!detail) {
+        s_detail = -1;
+    }
+    ui_lv_set_hidden(objects.sd_detail, !detail);
+    if (detail) {
+        char num[16], when[40], buf2[64];
+        scores_fmt_thousands(pick.score, num, sizeof(num));
+        snprintf(buf2, sizeof(buf2), "Place %s \xC2\xB7 %s", place, num);
+        ui_lv_set_text(objects.sd_title, buf2);
+        scores_fmt_when(pick.when, when, sizeof(when));
+        ui_lv_set_text(objects.sd_when, when);
+        const unsigned loops = pick.levels / GAME_LEVELS;
+        int n = snprintf(buf2, sizeof(buf2), "%u %s", (unsigned)pick.levels,
+                         pick.levels == 1 ? "safe" : "safes");
+        if (loops > 0) {
+            n += snprintf(buf2 + n, sizeof(buf2) - (unsigned)n, " \xC2\xB7 %u %s", loops,
+                          loops == 1 ? "loop" : "loops");
+        }
+        if (!lives) {
+            snprintf(buf2 + n, sizeof(buf2) - (unsigned)n, " \xC2\xB7 %u %s",
+                     (unsigned)pick.fails, pick.fails == 1 ? "fail" : "fails");
+        }
+        ui_lv_set_text(objects.sd_stats, buf2);
     }
 }
 

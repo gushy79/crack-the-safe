@@ -23,6 +23,9 @@
  * levels x 10,000 + speed points, so it always agrees with `levels`. */
 typedef struct {
     uint32_t score;
+    uint32_t when;      /* local date and time as seconds since 1970-01-01 00:00
+                           (UTC plus the phone's offset at setup); 0 = unknown,
+                           the clock was not set (see wifi_link.h) */
     uint16_t levels;    /* 1..SCORES_MAX_LEVELS */
     uint16_t fails;
 } score_entry_t;
@@ -54,6 +57,14 @@ bool scores_valid(const score_table_t *t);
  *  of the levels was completed, fails when there were any and `show_fails`:
  *  Lives leaves them out, a lost life is already in its score). */
 void scores_fmt_run(score_entry_t e, bool show_fails, char *out, unsigned out_len);
+
+/** A table saved before runs had a date (entries of score, levels, fails only,
+ *  8 bytes each after a 4-byte header). Converts it, dates unknown; false if
+ *  the bytes are not such a table. */
+bool scores_from_v1(const void *blob, unsigned len, score_table_t *out);
+
+/** "Fri 7 Nov 2026, 21:45" from a `when`; "Date not recorded" for 0. */
+void scores_fmt_when(uint32_t when, char *out, unsigned out_len);
 
 /** Write a number with thousands separators ("1,920") into out, always
  *  NUL-terminated and truncated to fit. */

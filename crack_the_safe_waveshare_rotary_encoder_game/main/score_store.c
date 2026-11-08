@@ -27,11 +27,13 @@ void score_store_load(int mode, score_table_t *t)
     }
     char key[8];
     key_for(mode, key, sizeof(key));
-    static score_table_t got;          /* 2 KB: not on the stack */
+    static score_table_t got;          /* 3 KB: not on the stack */
     size_t len = sizeof(got);
     const esp_err_t err = nvs_get_blob(h, key, &got, &len);
     if (err == ESP_OK && len == sizeof(got) && scores_valid(&got)) {
         *t = got;
+    } else if (err == ESP_OK && scores_from_v1(&got, (unsigned)len, t)) {
+        ESP_LOGI(TAG, "mode %d: older table, dates unknown", mode);
     } else if (err != ESP_ERR_NVS_NOT_FOUND) {      /* absent = nothing saved yet */
         ESP_LOGW(TAG, "mode %d: no usable saved table, starting empty", mode);
     }

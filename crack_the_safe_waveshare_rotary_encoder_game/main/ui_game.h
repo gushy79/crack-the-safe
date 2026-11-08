@@ -17,6 +17,10 @@ void ui_game_refresh(void);
 /** Scroll the Headphones list by knob detents. LVGL task, lock held. */
 void ui_game_scroll_headphones(int detents);
 
+/** Open the detail panel of a Scores row (0..5), or close it (-1). Takes effect
+ *  at the next ui_game_refresh(). */
+void ui_game_score_detail(int row);
+
 /** Show or hide the Headphones page's (i) panel (Forget Device / Cancel).
  *  Takes effect at the next ui_game_refresh(). */
 void ui_game_headphones_info(bool open);

@@ -136,6 +136,7 @@ typedef struct _objects_t {
     lv_obj_t *hint_text;
     lv_obj_t *level_text;
     lv_obj_t *battery_icon;
+    lv_obj_t *play_wifi_icon;
     lv_obj_t *timer_text;
     lv_obj_t *lives_text;
     lv_obj_t *slot1;
@@ -191,6 +192,12 @@ typedef struct _objects_t {
     lv_obj_t *scores_row_6;
     lv_obj_t *scores_back;
     lv_obj_t *scores_back_text;
+    lv_obj_t *sd_detail;
+    lv_obj_t *sd_title;
+    lv_obj_t *sd_when;
+    lv_obj_t *sd_stats;
+    lv_obj_t *sd_close;
+    lv_obj_t *sd_close_text;
     lv_obj_t *modes_title;
     lv_obj_t *modes_classic;
     lv_obj_t *modes_classic_text;

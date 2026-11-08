@@ -40,6 +40,9 @@ void app_modes_pick(game_rules_t rules);
 void app_menu_settings(void);
 /** Settings' Wi-Fi row: the phone-driven setup page. */
 void app_settings_wifi(void);
+/** A tap on a Scores row (0..4 the table, 5 the latest entry's own line) opens its
+ *  detail panel; -1 closes it. */
+void app_scores_row(int row);
 /** The Top-5 Scores page (the knob flips between the Classic and Lives tables). */
 void app_menu_scores(void);
 /** Back out of the menu, Settings or Headphones, one screen at a time. */

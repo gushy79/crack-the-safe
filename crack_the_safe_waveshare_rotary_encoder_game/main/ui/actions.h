@@ -34,6 +34,8 @@ extern void action_settings_haptic_down(lv_event_t * e);
 extern void action_settings_haptic_up(lv_event_t * e);
 extern void action_settings_wifi(lv_event_t * e);
 extern void action_wifi_back(lv_event_t * e);
+extern void action_scores_row(lv_event_t * e);
+extern void action_scores_detail_close(lv_event_t * e);
 
 #ifdef __cplusplus
 }
